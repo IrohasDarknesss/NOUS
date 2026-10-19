@@ -1,0 +1,11 @@
+{
+  "participation": { "1": 0.3, "2": 0.45, "3": 0.6, "4": 0.75, "5": 0.9 },
+  "candidateCount": 2,
+  "weights": { "post": 3.0, "reply": 3.0, "like": 2.5, "follow": 1.5, "unfollow": 0.5 },
+  "recentPenalty": 0.4,
+  "firstPersonRules": [
+    { "keywords": ["丁寧語", "敬語", "です・ます"], "mismatch": ["俺", "オレ", "おれ", "あたし", "うち"] },
+    { "keywords": ["無口", "ぶっきらぼう", "荒っぽい"], "mismatch": ["わたくし"] },
+    { "keywords": ["子ども", "幼い"], "mismatch": ["わたくし", "小生"] }
+  ]
+}
