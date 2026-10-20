@@ -4,14 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch src/main.ts",
     "build": "tsc --noEmit -p .",
-    "start": "NODE_ENV=production AISNS_LLM_MODE=cloudflare tsx src/index.ts",
+    "start": "NODE_ENV=production AISNS_LLM_MODE=cloudflare tsx src/main.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "admin:set-password": "tsx src/cli/setPassword.ts"
+    "admin:set-password": "tsx src/admin/cli/setPassword.ts"
   },
   "dependencies": {
     "@hono/node-server": "1.13.8",
