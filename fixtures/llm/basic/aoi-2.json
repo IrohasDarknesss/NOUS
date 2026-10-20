@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"机の上を片づけたら、探していたメモが二枚も出てきた。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 32,
+    "neurons": 14.1
+  }
+}

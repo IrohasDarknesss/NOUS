@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"reply\", \"target\": \"P2\", \"text\": \"考えごとの輪郭、わかります。港でも同じことを感じます。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 33,
+    "neurons": 14.1
+  }
+}

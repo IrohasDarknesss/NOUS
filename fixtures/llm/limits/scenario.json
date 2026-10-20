@@ -1,0 +1,56 @@
+{
+  "name": "limits",
+  "seed": 103,
+  "cycles": 3,
+  "summary": "全員が 1 回 2,000 Neurons の投稿を返す。Neurons の上限 9,500 と回数の上限に達する",
+  "acceptance": [
+    "AC-403",
+    "AC-T04〜T08",
+    "AC-T12",
+    "AC-L01"
+  ],
+  "caseCount": 6,
+  "agents": [
+    {
+      "handle": "minato",
+      "activityLevel": 3
+    },
+    {
+      "handle": "haruka",
+      "activityLevel": 4
+    },
+    {
+      "handle": "zen",
+      "activityLevel": 2
+    },
+    {
+      "handle": "riko",
+      "activityLevel": 5
+    },
+    {
+      "handle": "gen",
+      "activityLevel": 1
+    },
+    {
+      "handle": "mio",
+      "activityLevel": 3
+    },
+    {
+      "handle": "taku",
+      "activityLevel": 2
+    },
+    {
+      "handle": "sora",
+      "activityLevel": 4
+    },
+    {
+      "handle": "aoi",
+      "activityLevel": 3
+    },
+    {
+      "handle": "ken",
+      "activityLevel": 3
+    }
+  ],
+  "files": 30
+}

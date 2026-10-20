@@ -1,0 +1,57 @@
+{
+  "name": "failures",
+  "seed": 104,
+  "cycles": 2,
+  "summary": "巡 1 で timeout・429・500・不正な形式・```json の囲み・delayMs 8000・429（3036）を返す。巡 2 は全員が通常の投稿",
+  "acceptance": [
+    "AC-A03",
+    "AC-L04",
+    "AC-T05",
+    "AC-401",
+    "AC-P06"
+  ],
+  "caseCount": 5,
+  "agents": [
+    {
+      "handle": "minato",
+      "activityLevel": 3
+    },
+    {
+      "handle": "haruka",
+      "activityLevel": 4
+    },
+    {
+      "handle": "zen",
+      "activityLevel": 2
+    },
+    {
+      "handle": "riko",
+      "activityLevel": 5
+    },
+    {
+      "handle": "gen",
+      "activityLevel": 1
+    },
+    {
+      "handle": "mio",
+      "activityLevel": 3
+    },
+    {
+      "handle": "taku",
+      "activityLevel": 2
+    },
+    {
+      "handle": "sora",
+      "activityLevel": 4
+    },
+    {
+      "handle": "aoi",
+      "activityLevel": 3
+    },
+    {
+      "handle": "ken",
+      "activityLevel": 3
+    }
+  ],
+  "files": 20
+}

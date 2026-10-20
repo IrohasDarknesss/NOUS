@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"unfollow\", \"target\": \"@haruka\", \"text\": null}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 16,
+    "neurons": 13.6
+  }
+}

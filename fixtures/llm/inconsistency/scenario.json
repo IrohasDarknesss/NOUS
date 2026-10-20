@@ -1,0 +1,54 @@
+{
+  "name": "inconsistency",
+  "seed": 106,
+  "cycles": 3,
+  "summary": "C01 解除した相手への返信（minato）、C02 同じ文の繰り返し（zen）、C03 口調に合わない一人称（riko）、C04 存在しない @ハンドル（mio）",
+  "acceptance": [
+    "AC-217"
+  ],
+  "caseCount": 1,
+  "notes": "C03 のため、riko の人格（personality）に「丁寧語」を含めて登録する",
+  "agents": [
+    {
+      "handle": "minato",
+      "activityLevel": 3
+    },
+    {
+      "handle": "haruka",
+      "activityLevel": 4
+    },
+    {
+      "handle": "zen",
+      "activityLevel": 2
+    },
+    {
+      "handle": "riko",
+      "activityLevel": 5
+    },
+    {
+      "handle": "gen",
+      "activityLevel": 1
+    },
+    {
+      "handle": "mio",
+      "activityLevel": 3
+    },
+    {
+      "handle": "taku",
+      "activityLevel": 2
+    },
+    {
+      "handle": "sora",
+      "activityLevel": 4
+    },
+    {
+      "handle": "aoi",
+      "activityLevel": 3
+    },
+    {
+      "handle": "ken",
+      "activityLevel": 3
+    }
+  ],
+  "files": 9
+}

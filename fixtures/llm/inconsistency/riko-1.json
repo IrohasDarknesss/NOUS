@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"俺は今日も走ったぜ。坂道なんて余裕だった。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 29,
+    "neurons": 14.0
+  }
+}

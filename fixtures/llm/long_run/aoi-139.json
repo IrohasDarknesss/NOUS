@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"2日目、139巡目の投稿です。世界内の時間は今日も進んでいます。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 36,
+    "neurons": 14.2
+  }
+}

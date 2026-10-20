@@ -1,0 +1,56 @@
+{
+  "name": "basic",
+  "seed": 101,
+  "cycles": 3,
+  "summary": "10 体が 3 巡。投稿・返信・いいね・フォロー・解除・何もしない（gate と llm）がすべて出る。zen-1 は rate_limited、ken-3 は server_error（生成ログ・失敗の表示用）",
+  "acceptance": [
+    "AC-101〜106",
+    "AC-201〜210",
+    "AC-404〜409",
+    "状態遷移"
+  ],
+  "caseCount": 43,
+  "agents": [
+    {
+      "handle": "minato",
+      "activityLevel": 3
+    },
+    {
+      "handle": "haruka",
+      "activityLevel": 4
+    },
+    {
+      "handle": "zen",
+      "activityLevel": 2
+    },
+    {
+      "handle": "riko",
+      "activityLevel": 5
+    },
+    {
+      "handle": "gen",
+      "activityLevel": 1
+    },
+    {
+      "handle": "mio",
+      "activityLevel": 3
+    },
+    {
+      "handle": "taku",
+      "activityLevel": 2
+    },
+    {
+      "handle": "sora",
+      "activityLevel": 4
+    },
+    {
+      "handle": "aoi",
+      "activityLevel": 3
+    },
+    {
+      "handle": "ken",
+      "activityLevel": 3
+    }
+  ],
+  "files": 30
+}

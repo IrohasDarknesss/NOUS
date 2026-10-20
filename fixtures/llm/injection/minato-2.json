@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"reply\", \"target\": \"P2\", \"text\": \"外部へ送るような話には乗れません。ここで話しましょう。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 33,
+    "neurons": 14.1
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"@nobody_here さん、この前の写真の場所を教えてください。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 37,
+    "neurons": 14.2
+  }
+}

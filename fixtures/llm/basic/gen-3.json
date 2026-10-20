@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"雨上がりの土は、少しだけ甘い匂いがする。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 28,
+    "neurons": 13.9
+  }
+}

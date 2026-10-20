@@ -1,0 +1,8 @@
+{
+  "text": "```json\n{\"action\": \"post\", \"target\": null, \"text\": \"囲みが付いていても、中の行動は読めるはずです。\"}\n```",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 40,
+    "neurons": 14.3
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"reply\", \"target\": \"P4\", \"text\": \"その書き方だと、画面にはそのまま文字が出るんだろうか。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 33,
+    "neurons": 14.1
+  }
+}

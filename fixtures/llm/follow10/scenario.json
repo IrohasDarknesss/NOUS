@@ -1,0 +1,54 @@
+{
+  "name": "follow10",
+  "seed": 102,
+  "cycles": 10,
+  "summary": "奇数の巡で隣の住人をフォロー、偶数の巡で解除する 10 巡（Q-403）",
+  "acceptance": [
+    "AC-205",
+    "AC-104"
+  ],
+  "caseCount": 2,
+  "agents": [
+    {
+      "handle": "minato",
+      "activityLevel": 3
+    },
+    {
+      "handle": "haruka",
+      "activityLevel": 4
+    },
+    {
+      "handle": "zen",
+      "activityLevel": 2
+    },
+    {
+      "handle": "riko",
+      "activityLevel": 5
+    },
+    {
+      "handle": "gen",
+      "activityLevel": 1
+    },
+    {
+      "handle": "mio",
+      "activityLevel": 3
+    },
+    {
+      "handle": "taku",
+      "activityLevel": 2
+    },
+    {
+      "handle": "sora",
+      "activityLevel": 4
+    },
+    {
+      "handle": "aoi",
+      "activityLevel": 3
+    },
+    {
+      "handle": "ken",
+      "activityLevel": 3
+    }
+  ],
+  "files": 100
+}

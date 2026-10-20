@@ -1,1 +1,9 @@
-{"text": "{\"action\":\"like\",\"target\":\"P1\",\"text\":null}", "usage": {"prompt_tokens": 1390, "completion_tokens": 18, "neurons": 13.1}, "delayMs": 1500}
+{
+  "text": "{\"action\": \"like\", \"target\": \"P1\", \"text\": null}",
+  "usage": {
+    "prompt_tokens": 1390,
+    "completion_tokens": 18,
+    "neurons": 13.1
+  },
+  "delayMs": 1500
+}
