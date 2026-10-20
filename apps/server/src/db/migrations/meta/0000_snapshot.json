@@ -1,0 +1,2265 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "34ac558a-6042-4cf6-bf04-1fdbf0848a85",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "admin_account": {
+      "name": "admin_account",
+      "columns": {
+        "admin_id": {
+          "name": "admin_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "failed_count": {
+          "name": "failed_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "locked_until": {
+          "name": "locked_until",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ux_admin_single": {
+          "name": "ux_admin_single",
+          "columns": ["(1)"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "admin_account_display_name_check": {
+          "name": "admin_account_display_name_check",
+          "value": "length(display_name) BETWEEN 1 AND 30"
+        },
+        "admin_account_failed_count_check": {
+          "name": "admin_account_failed_count_check",
+          "value": "failed_count >= 0"
+        },
+        "admin_account_updated_at_check": {
+          "name": "admin_account_updated_at_check",
+          "value": "length(updated_at) = 24"
+        }
+      }
+    },
+    "admin_audit_logs": {
+      "name": "admin_audit_logs",
+      "columns": {
+        "audit_id": {
+          "name": "audit_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "admin_id": {
+          "name": "admin_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation": {
+          "name": "operation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "before_json": {
+          "name": "before_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "after_json": {
+          "name": "after_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "operated_at": {
+          "name": "operated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_audit_operated": {
+          "name": "idx_audit_operated",
+          "columns": ["operated_at DESC"],
+          "isUnique": false
+        },
+        "idx_audit_operation": {
+          "name": "idx_audit_operation",
+          "columns": ["operation", "operated_at DESC"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "admin_audit_logs_admin_id_admin_account_admin_id_fk": {
+          "name": "admin_audit_logs_admin_id_admin_account_admin_id_fk",
+          "tableFrom": "admin_audit_logs",
+          "tableTo": "admin_account",
+          "columnsFrom": ["admin_id"],
+          "columnsTo": ["admin_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "admin_audit_logs_world_id_worlds_world_id_fk": {
+          "name": "admin_audit_logs_world_id_worlds_world_id_fk",
+          "tableFrom": "admin_audit_logs",
+          "tableTo": "worlds",
+          "columnsFrom": ["world_id"],
+          "columnsTo": ["world_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "admin_audit_logs_operation_check": {
+          "name": "admin_audit_logs_operation_check",
+          "value": "operation IN ('world.start', 'world.pause', 'world.resume', 'world.emergency_stop', 'world.reset', 'settings.update', 'agent.create', 'agent.update', 'agent.delete', 'agent.stop', 'agent.resume', 'post.hide', 'post.unhide', 'invitation.issue', 'invitation.revoke', 'admin.login', 'admin.logout', 'admin.login_failed')"
+        },
+        "admin_audit_logs_target_type_check": {
+          "name": "admin_audit_logs_target_type_check",
+          "value": "target_type IN ('world', 'agent', 'post', 'invitation', 'settings', 'admin')"
+        },
+        "admin_audit_logs_before_json_check": {
+          "name": "admin_audit_logs_before_json_check",
+          "value": "before_json IS NULL OR json_valid(before_json)"
+        },
+        "admin_audit_logs_after_json_check": {
+          "name": "admin_audit_logs_after_json_check",
+          "value": "after_json IS NULL OR json_valid(after_json)"
+        },
+        "admin_audit_logs_operated_at_check": {
+          "name": "admin_audit_logs_operated_at_check",
+          "value": "length(operated_at) = 24"
+        }
+      }
+    },
+    "admin_sessions": {
+      "name": "admin_sessions",
+      "columns": {
+        "session_hash": {
+          "name": "session_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "admin_id": {
+          "name": "admin_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "csrf_token": {
+          "name": "csrf_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_sessions_admin": {
+          "name": "idx_sessions_admin",
+          "columns": ["admin_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "admin_sessions_admin_id_admin_account_admin_id_fk": {
+          "name": "admin_sessions_admin_id_admin_account_admin_id_fk",
+          "tableFrom": "admin_sessions",
+          "tableTo": "admin_account",
+          "columnsFrom": ["admin_id"],
+          "columnsTo": ["admin_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "admin_sessions_session_hash_check": {
+          "name": "admin_sessions_session_hash_check",
+          "value": "length(session_hash) = 64"
+        },
+        "admin_sessions_csrf_token_check": {
+          "name": "admin_sessions_csrf_token_check",
+          "value": "length(csrf_token) = 43"
+        },
+        "admin_sessions_created_at_check": {
+          "name": "admin_sessions_created_at_check",
+          "value": "length(created_at) = 24"
+        },
+        "admin_sessions_last_seen_at_check": {
+          "name": "admin_sessions_last_seen_at_check",
+          "value": "length(last_seen_at) = 24"
+        }
+      }
+    },
+    "agents": {
+      "name": "agents",
+      "columns": {
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "handle": {
+          "name": "handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bio": {
+          "name": "bio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "interests": {
+          "name": "interests",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "topics": {
+          "name": "topics",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "personality": {
+          "name": "personality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "values_text": {
+          "name": "values_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stance": {
+          "name": "stance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activity_level": {
+          "name": "activity_level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 3
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ux_agents_world_handle": {
+          "name": "ux_agents_world_handle",
+          "columns": ["world_id", "handle"],
+          "isUnique": true
+        },
+        "idx_agents_world_state": {
+          "name": "idx_agents_world_state",
+          "columns": ["world_id", "state"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agents_world_id_worlds_world_id_fk": {
+          "name": "agents_world_id_worlds_world_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "worlds",
+          "columnsFrom": ["world_id"],
+          "columnsTo": ["world_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "agents_agent_id_check": {
+          "name": "agents_agent_id_check",
+          "value": "length(agent_id) = 26"
+        },
+        "agents_handle_check": {
+          "name": "agents_handle_check",
+          "value": "length(handle) BETWEEN 3 AND 20 AND handle NOT GLOB '*[^A-Za-z0-9_]*'"
+        },
+        "agents_display_name_check": {
+          "name": "agents_display_name_check",
+          "value": "length(display_name) BETWEEN 1 AND 30"
+        },
+        "agents_bio_check": {
+          "name": "agents_bio_check",
+          "value": "length(bio) <= 200"
+        },
+        "agents_interests_check": {
+          "name": "agents_interests_check",
+          "value": "length(interests) BETWEEN 1 AND 100"
+        },
+        "agents_topics_check": {
+          "name": "agents_topics_check",
+          "value": "length(topics) BETWEEN 1 AND 100"
+        },
+        "agents_personality_check": {
+          "name": "agents_personality_check",
+          "value": "length(personality) BETWEEN 1 AND 100"
+        },
+        "agents_values_text_check": {
+          "name": "agents_values_text_check",
+          "value": "length(values_text) BETWEEN 1 AND 100"
+        },
+        "agents_stance_check": {
+          "name": "agents_stance_check",
+          "value": "length(stance) BETWEEN 1 AND 100"
+        },
+        "agents_activity_level_check": {
+          "name": "agents_activity_level_check",
+          "value": "activity_level BETWEEN 1 AND 5"
+        },
+        "agents_state_check": {
+          "name": "agents_state_check",
+          "value": "state IN ('active', 'stopped')"
+        },
+        "agents_created_at_check": {
+          "name": "agents_created_at_check",
+          "value": "length(created_at) = 24"
+        },
+        "agents_updated_at_check": {
+          "name": "agents_updated_at_check",
+          "value": "length(updated_at) = 24"
+        }
+      }
+    },
+    "daily_metrics": {
+      "name": "daily_metrics",
+      "columns": {
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "usage_date": {
+          "name": "usage_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "runs": {
+          "name": "runs",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "posts": {
+          "name": "posts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "replies": {
+          "name": "replies",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "replied_posts": {
+          "name": "replied_posts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "likes": {
+          "name": "likes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "follows": {
+          "name": "follows",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "nones": {
+          "name": "nones",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "failures": {
+          "name": "failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "daily_metrics_world_id_worlds_world_id_fk": {
+          "name": "daily_metrics_world_id_worlds_world_id_fk",
+          "tableFrom": "daily_metrics",
+          "tableTo": "worlds",
+          "columnsFrom": ["world_id"],
+          "columnsTo": ["world_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "daily_metrics_world_id_usage_date_pk": {
+          "columns": ["world_id", "usage_date"],
+          "name": "daily_metrics_world_id_usage_date_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "daily_metrics_usage_date_check": {
+          "name": "daily_metrics_usage_date_check",
+          "value": "length(usage_date) = 10"
+        }
+      }
+    },
+    "daily_usage": {
+      "name": "daily_usage",
+      "columns": {
+        "usage_date": {
+          "name": "usage_date",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "calls": {
+          "name": "calls",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "runs": {
+          "name": "runs",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "prompt_tokens": {
+          "name": "prompt_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "completion_tokens": {
+          "name": "completion_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "neurons": {
+          "name": "neurons",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "daily_usage_usage_date_check": {
+          "name": "daily_usage_usage_date_check",
+          "value": "length(usage_date) = 10"
+        }
+      }
+    },
+    "follows": {
+      "name": "follows",
+      "columns": {
+        "follow_id": {
+          "name": "follow_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "follower_id": {
+          "name": "follower_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "followee_id": {
+          "name": "followee_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "started_world_sec": {
+          "name": "started_world_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ended_world_sec": {
+          "name": "ended_world_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "start_event_id": {
+          "name": "start_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_event_id": {
+          "name": "end_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ux_follows_active": {
+          "name": "ux_follows_active",
+          "columns": ["follower_id", "followee_id"],
+          "isUnique": true,
+          "where": "ended_world_sec IS NULL"
+        },
+        "idx_follows_followee_active": {
+          "name": "idx_follows_followee_active",
+          "columns": ["followee_id"],
+          "isUnique": false,
+          "where": "ended_world_sec IS NULL"
+        },
+        "idx_follows_world": {
+          "name": "idx_follows_world",
+          "columns": ["world_id", "started_world_sec"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "follows_world_id_worlds_world_id_fk": {
+          "name": "follows_world_id_worlds_world_id_fk",
+          "tableFrom": "follows",
+          "tableTo": "worlds",
+          "columnsFrom": ["world_id"],
+          "columnsTo": ["world_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "follows_follower_id_agents_agent_id_fk": {
+          "name": "follows_follower_id_agents_agent_id_fk",
+          "tableFrom": "follows",
+          "tableTo": "agents",
+          "columnsFrom": ["follower_id"],
+          "columnsTo": ["agent_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "follows_followee_id_agents_agent_id_fk": {
+          "name": "follows_followee_id_agents_agent_id_fk",
+          "tableFrom": "follows",
+          "tableTo": "agents",
+          "columnsFrom": ["followee_id"],
+          "columnsTo": ["agent_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "follows_start_event_id_generation_events_event_id_fk": {
+          "name": "follows_start_event_id_generation_events_event_id_fk",
+          "tableFrom": "follows",
+          "tableTo": "generation_events",
+          "columnsFrom": ["start_event_id"],
+          "columnsTo": ["event_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "follows_end_event_id_generation_events_event_id_fk": {
+          "name": "follows_end_event_id_generation_events_event_id_fk",
+          "tableFrom": "follows",
+          "tableTo": "generation_events",
+          "columnsFrom": ["end_event_id"],
+          "columnsTo": ["event_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "follows_follower_id_check": {
+          "name": "follows_follower_id_check",
+          "value": "follower_id <> followee_id"
+        },
+        "follows_started_world_sec_check": {
+          "name": "follows_started_world_sec_check",
+          "value": "started_world_sec >= 0"
+        },
+        "follows_ended_world_sec_check": {
+          "name": "follows_ended_world_sec_check",
+          "value": "ended_world_sec IS NULL OR ended_world_sec >= started_world_sec"
+        },
+        "follows_end_event_id_check": {
+          "name": "follows_end_event_id_check",
+          "value": "(ended_world_sec IS NULL) = (end_event_id IS NULL)"
+        }
+      }
+    },
+    "generation_attempts": {
+      "name": "generation_attempts",
+      "columns": {
+        "attempt_id": {
+          "name": "attempt_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attempt_no": {
+          "name": "attempt_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "result": {
+          "name": "result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "http_status": {
+          "name": "http_status",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_detail": {
+          "name": "error_detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "prompt_tokens": {
+          "name": "prompt_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "completion_tokens": {
+          "name": "completion_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "neurons": {
+          "name": "neurons",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ux_attempts_event_no": {
+          "name": "ux_attempts_event_no",
+          "columns": ["event_id", "attempt_no"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "generation_attempts_event_id_generation_events_event_id_fk": {
+          "name": "generation_attempts_event_id_generation_events_event_id_fk",
+          "tableFrom": "generation_attempts",
+          "tableTo": "generation_events",
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["event_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "generation_attempts_attempt_no_check": {
+          "name": "generation_attempts_attempt_no_check",
+          "value": "attempt_no BETWEEN 1 AND 4"
+        },
+        "generation_attempts_result_check": {
+          "name": "generation_attempts_result_check",
+          "value": "result IN ('ok', 'timeout', 'rate_limited', 'server_error', 'invalid_format', 'free_tier', 'cancelled')"
+        },
+        "generation_attempts_error_detail_check": {
+          "name": "generation_attempts_error_detail_check",
+          "value": "error_detail IS NULL OR length(error_detail) <= 500"
+        },
+        "generation_attempts_duration_ms_check": {
+          "name": "generation_attempts_duration_ms_check",
+          "value": "duration_ms >= 0"
+        },
+        "generation_attempts_started_at_check": {
+          "name": "generation_attempts_started_at_check",
+          "value": "length(started_at) = 24"
+        }
+      }
+    },
+    "generation_events": {
+      "name": "generation_events",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cycle_no": {
+          "name": "cycle_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cycle_seed": {
+          "name": "cycle_seed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'running'"
+        },
+        "decided_by": {
+          "name": "decided_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "failure_kind": {
+          "name": "failure_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action_candidates": {
+          "name": "action_candidates",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "input_attributes": {
+          "name": "input_attributes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
+        "input_memories": {
+          "name": "input_memories",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "input_post_ids": {
+          "name": "input_post_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "prompt_text": {
+          "name": "prompt_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "output_text": {
+          "name": "output_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "model_id": {
+          "name": "model_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt_version": {
+          "name": "prompt_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "llm_mode": {
+          "name": "llm_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt_tokens": {
+          "name": "prompt_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "completion_tokens": {
+          "name": "completion_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "neurons": {
+          "name": "neurons",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "cost_jpy": {
+          "name": "cost_jpy",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "consistency_flags": {
+          "name": "consistency_flags",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "world_time_sec": {
+          "name": "world_time_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "usage_date": {
+          "name": "usage_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_gen_world_started": {
+          "name": "idx_gen_world_started",
+          "columns": ["world_id", "started_at DESC"],
+          "isUnique": false
+        },
+        "idx_gen_world_agent": {
+          "name": "idx_gen_world_agent",
+          "columns": ["world_id", "agent_id", "started_at DESC"],
+          "isUnique": false
+        },
+        "idx_gen_world_status": {
+          "name": "idx_gen_world_status",
+          "columns": ["world_id", "status"],
+          "isUnique": false
+        },
+        "idx_gen_llm_recent": {
+          "name": "idx_gen_llm_recent",
+          "columns": ["decided_by", "status", "started_at DESC"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "generation_events_world_id_worlds_world_id_fk": {
+          "name": "generation_events_world_id_worlds_world_id_fk",
+          "tableFrom": "generation_events",
+          "tableTo": "worlds",
+          "columnsFrom": ["world_id"],
+          "columnsTo": ["world_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "generation_events_agent_id_agents_agent_id_fk": {
+          "name": "generation_events_agent_id_agents_agent_id_fk",
+          "tableFrom": "generation_events",
+          "tableTo": "agents",
+          "columnsFrom": ["agent_id"],
+          "columnsTo": ["agent_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "generation_events_event_id_check": {
+          "name": "generation_events_event_id_check",
+          "value": "length(event_id) = 26"
+        },
+        "generation_events_cycle_no_check": {
+          "name": "generation_events_cycle_no_check",
+          "value": "cycle_no >= 1"
+        },
+        "generation_events_status_check": {
+          "name": "generation_events_status_check",
+          "value": "status IN ('running', 'succeeded', 'failed', 'cancelled', 'interrupted')"
+        },
+        "generation_events_decided_by_check": {
+          "name": "generation_events_decided_by_check",
+          "value": "decided_by IN ('gate', 'llm')"
+        },
+        "generation_events_action_check": {
+          "name": "generation_events_action_check",
+          "value": "action IS NULL OR action IN ('post', 'reply', 'like', 'follow', 'unfollow', 'none')"
+        },
+        "generation_events_failure_kind_check": {
+          "name": "generation_events_failure_kind_check",
+          "value": "failure_kind IS NULL OR failure_kind IN ('timeout', 'rate_limited', 'server_error', 'invalid_format', 'free_tier', 'cancelled', 'stopped', 'interrupted')"
+        },
+        "generation_events_action_candidates_check": {
+          "name": "generation_events_action_candidates_check",
+          "value": "action_candidates IS NULL OR json_valid(action_candidates)"
+        },
+        "generation_events_input_attributes_check": {
+          "name": "generation_events_input_attributes_check",
+          "value": "json_valid(input_attributes)"
+        },
+        "generation_events_input_memories_check": {
+          "name": "generation_events_input_memories_check",
+          "value": "json_valid(input_memories)"
+        },
+        "generation_events_input_post_ids_check": {
+          "name": "generation_events_input_post_ids_check",
+          "value": "json_valid(input_post_ids)"
+        },
+        "generation_events_llm_mode_check": {
+          "name": "generation_events_llm_mode_check",
+          "value": "llm_mode IN ('cloudflare', 'fixed')"
+        },
+        "generation_events_prompt_tokens_check": {
+          "name": "generation_events_prompt_tokens_check",
+          "value": "prompt_tokens >= 0"
+        },
+        "generation_events_completion_tokens_check": {
+          "name": "generation_events_completion_tokens_check",
+          "value": "completion_tokens >= 0"
+        },
+        "generation_events_neurons_check": {
+          "name": "generation_events_neurons_check",
+          "value": "neurons >= 0"
+        },
+        "generation_events_cost_jpy_check": {
+          "name": "generation_events_cost_jpy_check",
+          "value": "cost_jpy = 0"
+        },
+        "generation_events_consistency_flags_check": {
+          "name": "generation_events_consistency_flags_check",
+          "value": "consistency_flags IS NULL OR json_valid(consistency_flags)"
+        },
+        "generation_events_world_time_sec_check": {
+          "name": "generation_events_world_time_sec_check",
+          "value": "world_time_sec >= 0"
+        },
+        "generation_events_started_at_check": {
+          "name": "generation_events_started_at_check",
+          "value": "length(started_at) = 24"
+        },
+        "generation_events_finished_at_check": {
+          "name": "generation_events_finished_at_check",
+          "value": "(finished_at IS NULL OR length(finished_at) = 24) AND ((status = 'running') = (finished_at IS NULL))"
+        },
+        "generation_events_usage_date_check": {
+          "name": "generation_events_usage_date_check",
+          "value": "length(usage_date) = 10"
+        }
+      }
+    },
+    "hide_records": {
+      "name": "hide_records",
+      "columns": {
+        "hide_id": {
+          "name": "hide_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation": {
+          "name": "operation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "operated_at": {
+          "name": "operated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_hide_post": {
+          "name": "idx_hide_post",
+          "columns": ["post_id", "operated_at"],
+          "isUnique": false
+        },
+        "idx_hide_operated": {
+          "name": "idx_hide_operated",
+          "columns": ["operated_at DESC"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "hide_records_post_id_posts_post_id_fk": {
+          "name": "hide_records_post_id_posts_post_id_fk",
+          "tableFrom": "hide_records",
+          "tableTo": "posts",
+          "columnsFrom": ["post_id"],
+          "columnsTo": ["post_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "hide_records_operation_check": {
+          "name": "hide_records_operation_check",
+          "value": "operation IN ('hide', 'unhide')"
+        },
+        "hide_records_reason_check": {
+          "name": "hide_records_reason_check",
+          "value": "length(reason) <= 200"
+        },
+        "hide_records_operated_at_check": {
+          "name": "hide_records_operated_at_check",
+          "value": "length(operated_at) = 24"
+        }
+      }
+    },
+    "invitations": {
+      "name": "invitations",
+      "columns": {
+        "invitation_id": {
+          "name": "invitation_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "invitations_token_hash_unique": {
+          "name": "invitations_token_hash_unique",
+          "columns": ["token_hash"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "invitations_label_check": {
+          "name": "invitations_label_check",
+          "value": "length(label) BETWEEN 1 AND 30"
+        },
+        "invitations_token_hash_check": {
+          "name": "invitations_token_hash_check",
+          "value": "length(token_hash) = 64"
+        },
+        "invitations_issued_at_check": {
+          "name": "invitations_issued_at_check",
+          "value": "length(issued_at) = 24"
+        },
+        "invitations_revoked_at_check": {
+          "name": "invitations_revoked_at_check",
+          "value": "(revoked_at IS NULL OR length(revoked_at) = 24)"
+        },
+        "invitations_last_used_at_check": {
+          "name": "invitations_last_used_at_check",
+          "value": "(last_used_at IS NULL OR length(last_used_at) = 24)"
+        }
+      }
+    },
+    "likes": {
+      "name": "likes",
+      "columns": {
+        "like_id": {
+          "name": "like_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "world_time_sec": {
+          "name": "world_time_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "generation_event_id": {
+          "name": "generation_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "likes_generation_event_id_unique": {
+          "name": "likes_generation_event_id_unique",
+          "columns": ["generation_event_id"],
+          "isUnique": true
+        },
+        "ux_likes_agent_post": {
+          "name": "ux_likes_agent_post",
+          "columns": ["agent_id", "post_id"],
+          "isUnique": true
+        },
+        "idx_likes_post": {
+          "name": "idx_likes_post",
+          "columns": ["post_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "likes_world_id_worlds_world_id_fk": {
+          "name": "likes_world_id_worlds_world_id_fk",
+          "tableFrom": "likes",
+          "tableTo": "worlds",
+          "columnsFrom": ["world_id"],
+          "columnsTo": ["world_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "likes_agent_id_agents_agent_id_fk": {
+          "name": "likes_agent_id_agents_agent_id_fk",
+          "tableFrom": "likes",
+          "tableTo": "agents",
+          "columnsFrom": ["agent_id"],
+          "columnsTo": ["agent_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "likes_post_id_posts_post_id_fk": {
+          "name": "likes_post_id_posts_post_id_fk",
+          "tableFrom": "likes",
+          "tableTo": "posts",
+          "columnsFrom": ["post_id"],
+          "columnsTo": ["post_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "likes_generation_event_id_generation_events_event_id_fk": {
+          "name": "likes_generation_event_id_generation_events_event_id_fk",
+          "tableFrom": "likes",
+          "tableTo": "generation_events",
+          "columnsFrom": ["generation_event_id"],
+          "columnsTo": ["event_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "likes_world_time_sec_check": {
+          "name": "likes_world_time_sec_check",
+          "value": "world_time_sec >= 0"
+        },
+        "likes_created_at_check": {
+          "name": "likes_created_at_check",
+          "value": "length(created_at) = 24"
+        }
+      }
+    },
+    "memories": {
+      "name": "memories",
+      "columns": {
+        "memory_id": {
+          "name": "memory_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ux_memories_agent_kind": {
+          "name": "ux_memories_agent_kind",
+          "columns": ["agent_id", "kind"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "memories_agent_id_agents_agent_id_fk": {
+          "name": "memories_agent_id_agents_agent_id_fk",
+          "tableFrom": "memories",
+          "tableTo": "agents",
+          "columnsFrom": ["agent_id"],
+          "columnsTo": ["agent_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "memories_kind_check": {
+          "name": "memories_kind_check",
+          "value": "kind IN ('interest_profile', 'recent_posts', 'relationship_summary', 'conversation_summary')"
+        },
+        "memories_content_check": {
+          "name": "memories_content_check",
+          "value": "length(content) <= 3000"
+        },
+        "memories_updated_at_check": {
+          "name": "memories_updated_at_check",
+          "value": "length(updated_at) = 24"
+        }
+      }
+    },
+    "posts": {
+      "name": "posts",
+      "columns": {
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reply_to_post_id": {
+          "name": "reply_to_post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "root_post_id": {
+          "name": "root_post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "depth": {
+          "name": "depth",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'public'"
+        },
+        "world_time_sec": {
+          "name": "world_time_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "generation_event_id": {
+          "name": "generation_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "posts_generation_event_id_unique": {
+          "name": "posts_generation_event_id_unique",
+          "columns": ["generation_event_id"],
+          "isUnique": true
+        },
+        "idx_posts_timeline": {
+          "name": "idx_posts_timeline",
+          "columns": ["world_id", "visibility", "world_time_sec DESC", "post_id DESC"],
+          "isUnique": false
+        },
+        "idx_posts_root": {
+          "name": "idx_posts_root",
+          "columns": ["root_post_id", "world_time_sec"],
+          "isUnique": false
+        },
+        "idx_posts_reply_to": {
+          "name": "idx_posts_reply_to",
+          "columns": ["reply_to_post_id"],
+          "isUnique": false
+        },
+        "idx_posts_agent": {
+          "name": "idx_posts_agent",
+          "columns": ["agent_id", "world_time_sec DESC"],
+          "isUnique": false
+        },
+        "idx_posts_world_created": {
+          "name": "idx_posts_world_created",
+          "columns": ["world_id", "created_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "posts_world_id_worlds_world_id_fk": {
+          "name": "posts_world_id_worlds_world_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "worlds",
+          "columnsFrom": ["world_id"],
+          "columnsTo": ["world_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "posts_agent_id_agents_agent_id_fk": {
+          "name": "posts_agent_id_agents_agent_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "agents",
+          "columnsFrom": ["agent_id"],
+          "columnsTo": ["agent_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "posts_generation_event_id_generation_events_event_id_fk": {
+          "name": "posts_generation_event_id_generation_events_event_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "generation_events",
+          "columnsFrom": ["generation_event_id"],
+          "columnsTo": ["event_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "posts_reply_to_post_id_posts_post_id_fk": {
+          "name": "posts_reply_to_post_id_posts_post_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "posts",
+          "columnsFrom": ["reply_to_post_id"],
+          "columnsTo": ["post_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "posts_root_post_id_posts_post_id_fk": {
+          "name": "posts_root_post_id_posts_post_id_fk",
+          "tableFrom": "posts",
+          "tableTo": "posts",
+          "columnsFrom": ["root_post_id"],
+          "columnsTo": ["post_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "posts_post_id_check": {
+          "name": "posts_post_id_check",
+          "value": "length(post_id) = 26"
+        },
+        "posts_body_check": {
+          "name": "posts_body_check",
+          "value": "length(body) BETWEEN 1 AND 140"
+        },
+        "posts_root_post_id_check": {
+          "name": "posts_root_post_id_check",
+          "value": "(reply_to_post_id IS NULL) = (root_post_id = post_id)"
+        },
+        "posts_depth_check": {
+          "name": "posts_depth_check",
+          "value": "depth >= 0 AND (depth = 0) = (reply_to_post_id IS NULL)"
+        },
+        "posts_visibility_check": {
+          "name": "posts_visibility_check",
+          "value": "visibility IN ('public', 'hidden')"
+        },
+        "posts_world_time_sec_check": {
+          "name": "posts_world_time_sec_check",
+          "value": "world_time_sec >= 0"
+        },
+        "posts_created_at_check": {
+          "name": "posts_created_at_check",
+          "value": "length(created_at) = 24"
+        }
+      }
+    },
+    "view_access_logs": {
+      "name": "view_access_logs",
+      "columns": {
+        "log_id": {
+          "name": "log_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invitation_id": {
+          "name": "invitation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "result": {
+          "name": "result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accessed_at": {
+          "name": "accessed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_view_logs_accessed": {
+          "name": "idx_view_logs_accessed",
+          "columns": ["accessed_at DESC"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "view_access_logs_invitation_id_invitations_invitation_id_fk": {
+          "name": "view_access_logs_invitation_id_invitations_invitation_id_fk",
+          "tableFrom": "view_access_logs",
+          "tableTo": "invitations",
+          "columnsFrom": ["invitation_id"],
+          "columnsTo": ["invitation_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "view_access_logs_result_check": {
+          "name": "view_access_logs_result_check",
+          "value": "result IN ('allowed', 'denied')"
+        },
+        "view_access_logs_accessed_at_check": {
+          "name": "view_access_logs_accessed_at_check",
+          "value": "length(accessed_at) = 24"
+        }
+      }
+    },
+    "world_settings": {
+      "name": "world_settings",
+      "columns": {
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cycle_minutes": {
+          "name": "cycle_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 20
+        },
+        "activity_percent": {
+          "name": "activity_percent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
+        },
+        "max_ref_posts": {
+          "name": "max_ref_posts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 12
+        },
+        "max_memory_chars": {
+          "name": "max_memory_chars",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1200
+        },
+        "max_input_tokens": {
+          "name": "max_input_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1500
+        },
+        "max_output_tokens": {
+          "name": "max_output_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 300
+        },
+        "daily_neurons_limit": {
+          "name": "daily_neurons_limit",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 9500
+        },
+        "daily_runs_limit": {
+          "name": "daily_runs_limit",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 480
+        },
+        "max_concurrency": {
+          "name": "max_concurrency",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "model_id": {
+          "name": "model_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'@cf/google/gemma-4-26b-a4b-it'"
+        },
+        "prompt_version": {
+          "name": "prompt_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'v1'"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "world_settings_world_id_worlds_world_id_fk": {
+          "name": "world_settings_world_id_worlds_world_id_fk",
+          "tableFrom": "world_settings",
+          "tableTo": "worlds",
+          "columnsFrom": ["world_id"],
+          "columnsTo": ["world_id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "world_settings_cycle_minutes_check": {
+          "name": "world_settings_cycle_minutes_check",
+          "value": "cycle_minutes BETWEEN 15 AND 120"
+        },
+        "world_settings_activity_percent_check": {
+          "name": "world_settings_activity_percent_check",
+          "value": "activity_percent BETWEEN 10 AND 100"
+        },
+        "world_settings_max_ref_posts_check": {
+          "name": "world_settings_max_ref_posts_check",
+          "value": "max_ref_posts BETWEEN 1 AND 30"
+        },
+        "world_settings_max_memory_chars_check": {
+          "name": "world_settings_max_memory_chars_check",
+          "value": "max_memory_chars BETWEEN 200 AND 3000"
+        },
+        "world_settings_max_input_tokens_check": {
+          "name": "world_settings_max_input_tokens_check",
+          "value": "max_input_tokens BETWEEN 500 AND 2000"
+        },
+        "world_settings_max_output_tokens_check": {
+          "name": "world_settings_max_output_tokens_check",
+          "value": "max_output_tokens BETWEEN 100 AND 400"
+        },
+        "world_settings_daily_neurons_limit_check": {
+          "name": "world_settings_daily_neurons_limit_check",
+          "value": "daily_neurons_limit BETWEEN 1 AND 10000"
+        },
+        "world_settings_daily_runs_limit_check": {
+          "name": "world_settings_daily_runs_limit_check",
+          "value": "daily_runs_limit BETWEEN 1 AND 2000"
+        },
+        "world_settings_max_concurrency_check": {
+          "name": "world_settings_max_concurrency_check",
+          "value": "max_concurrency BETWEEN 1 AND 3"
+        },
+        "world_settings_model_id_check": {
+          "name": "world_settings_model_id_check",
+          "value": "model_id IN ('@cf/google/gemma-4-26b-a4b-it', '@cf/qwen/qwen3-30b-a3b-fp8')"
+        },
+        "world_settings_prompt_version_check": {
+          "name": "world_settings_prompt_version_check",
+          "value": "length(prompt_version) BETWEEN 1 AND 20"
+        },
+        "world_settings_updated_at_check": {
+          "name": "world_settings_updated_at_check",
+          "value": "length(updated_at) = 24"
+        }
+      }
+    },
+    "worlds": {
+      "name": "worlds",
+      "columns": {
+        "world_id": {
+          "name": "world_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'preparing'"
+        },
+        "stop_reason": {
+          "name": "stop_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "world_elapsed_sec": {
+          "name": "world_elapsed_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "running_since": {
+          "name": "running_since",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "heartbeat_at": {
+          "name": "heartbeat_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cycle_no": {
+          "name": "cycle_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "next_cycle_at": {
+          "name": "next_cycle_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ux_worlds_current": {
+          "name": "ux_worlds_current",
+          "columns": ["(1)"],
+          "isUnique": true,
+          "where": "state <> 'archived'"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "worlds_world_id_check": {
+          "name": "worlds_world_id_check",
+          "value": "length(world_id) = 26"
+        },
+        "worlds_name_check": {
+          "name": "worlds_name_check",
+          "value": "length(name) BETWEEN 1 AND 50"
+        },
+        "worlds_state_check": {
+          "name": "worlds_state_check",
+          "value": "state IN ('preparing', 'running', 'paused', 'limit_stopped', 'emergency_stopped', 'archived')"
+        },
+        "worlds_stop_reason_check": {
+          "name": "worlds_stop_reason_check",
+          "value": "stop_reason IS NULL OR stop_reason IN ('neurons_limit', 'runs_limit', 'free_tier_error', 'manual_pause', 'emergency')"
+        },
+        "worlds_world_elapsed_sec_check": {
+          "name": "worlds_world_elapsed_sec_check",
+          "value": "world_elapsed_sec >= 0"
+        },
+        "worlds_running_since_check": {
+          "name": "worlds_running_since_check",
+          "value": "(running_since IS NULL OR length(running_since) = 24) AND ((state = 'running') = (running_since IS NOT NULL))"
+        },
+        "worlds_heartbeat_at_check": {
+          "name": "worlds_heartbeat_at_check",
+          "value": "(heartbeat_at IS NULL OR length(heartbeat_at) = 24)"
+        },
+        "worlds_cycle_no_check": {
+          "name": "worlds_cycle_no_check",
+          "value": "cycle_no >= 0"
+        },
+        "worlds_next_cycle_at_check": {
+          "name": "worlds_next_cycle_at_check",
+          "value": "(next_cycle_at IS NULL OR length(next_cycle_at) = 24)"
+        },
+        "worlds_created_at_check": {
+          "name": "worlds_created_at_check",
+          "value": "length(created_at) = 24"
+        },
+        "worlds_started_at_check": {
+          "name": "worlds_started_at_check",
+          "value": "(started_at IS NULL OR length(started_at) = 24)"
+        },
+        "worlds_archived_at_check": {
+          "name": "worlds_archived_at_check",
+          "value": "(archived_at IS NULL OR length(archived_at) = 24) AND ((state = 'archived') = (archived_at IS NOT NULL))"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "ux_admin_single": {
+        "columns": {
+          "(1)": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_audit_operated": {
+        "columns": {
+          "operated_at DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_audit_operation": {
+        "columns": {
+          "operated_at DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_gen_world_started": {
+        "columns": {
+          "started_at DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_gen_world_agent": {
+        "columns": {
+          "started_at DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_gen_llm_recent": {
+        "columns": {
+          "started_at DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_hide_operated": {
+        "columns": {
+          "operated_at DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_posts_timeline": {
+        "columns": {
+          "world_time_sec DESC": {
+            "isExpression": true
+          },
+          "post_id DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_posts_agent": {
+        "columns": {
+          "world_time_sec DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_view_logs_accessed": {
+        "columns": {
+          "accessed_at DESC": {
+            "isExpression": true
+          }
+        }
+      },
+      "ux_worlds_current": {
+        "columns": {
+          "(1)": {
+            "isExpression": true
+          }
+        }
+      }
+    }
+  }
+}
