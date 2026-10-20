@@ -74,13 +74,17 @@ export function isAppError(err: unknown): err is AppError {
   return err instanceof AppError;
 }
 
-/** 設定の誤り（環境変数の不正、production での fake の時計など）。起動を止める */
+/**
+ * 設定の誤り（環境変数の不正、production での fake の時計、generation.json の不正など）。起動を止める。
+ * 問題が1つなら文字列、複数なら配列で渡す（clock・generationConfig の仮置きの ConfigError と同じ呼び方ができる）
+ */
 export class ConfigError extends Error {
   readonly problems: string[];
 
-  constructor(problems: string[]) {
-    super(`設定に誤りがあります: ${problems.join(" / ")}`);
+  constructor(problems: string | string[], options: { cause?: unknown } = {}) {
+    const list = typeof problems === "string" ? [problems] : problems;
+    super(typeof problems === "string" ? problems : `設定に誤りがあります: ${list.join(" / ")}`, options);
     this.name = "ConfigError";
-    this.problems = problems;
+    this.problems = list;
   }
 }

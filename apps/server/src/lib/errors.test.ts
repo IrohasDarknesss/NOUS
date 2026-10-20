@@ -64,4 +64,13 @@ describe("errors", () => {
     expect(err.message).toContain("A: x");
     expect(err.message).toContain("B: y");
   });
+
+  it("TC-NOUS44_DEV-32 ConfigError が1つの問題の文字列と cause を受ける", () => {
+    const cause = new Error("ENOENT");
+    const err = new ConfigError("config/generation.json を読めません", { cause });
+    expect(err.message).toBe("config/generation.json を読めません");
+    expect(err.problems).toEqual(["config/generation.json を読めません"]);
+    expect(err.cause).toBe(cause);
+    expect(err.name).toBe("ConfigError");
+  });
 });
