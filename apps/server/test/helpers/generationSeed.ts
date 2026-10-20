@@ -1,5 +1,5 @@
 // 行動生成のテストの準備：世界・エージェント・生成イベントを入れる（NOUS-62）
-import { agents, generation_events, worlds } from "../../src/db/schema";
+import { agents, generation_events, world_settings, worlds } from "../../src/db/schema";
 import type { Db } from "../../src/db/client";
 import { newUlid } from "../../src/lib/ids";
 
@@ -58,4 +58,45 @@ export function seedEvent(db: Db, worldId: string, agentId: string, cycleNo = 1,
     })
     .run();
   return eventId;
+}
+
+/** world_settings を入れる（NOUS-63） */
+export function seedWorldSettings(
+  db: Db,
+  worldId: string,
+  overrides: Partial<typeof world_settings.$inferInsert> = {},
+): void {
+  db.insert(world_settings)
+    .values({
+      world_id: worldId,
+      updated_at: SEED_NOW,
+      ...overrides,
+    })
+    .run();
+}
+
+/** running の世界と world_settings をまとめて作る（NOUS-63） */
+export function seedRunningWorld(
+  db: Db,
+  options: {
+    worldElapsedSec?: number;
+    runningSince?: string;
+    settings?: Partial<typeof world_settings.$inferInsert>;
+  } = {},
+): string {
+  const worldId = newUlid();
+  const runningSince = options.runningSince ?? SEED_NOW;
+  db.insert(worlds)
+    .values({
+      world_id: worldId,
+      name: "稼働中の世界",
+      state: "running",
+      world_elapsed_sec: options.worldElapsedSec ?? 120,
+      running_since: runningSince,
+      heartbeat_at: runningSince,
+      created_at: SEED_NOW,
+    })
+    .run();
+  seedWorldSettings(db, worldId, options.settings);
+  return worldId;
 }
