@@ -1,7 +1,7 @@
-import { CancelledError, ConfigError } from "./errors";
+import { CancelledError, ConfigError } from "../lib/errors";
 import { FakeClock } from "./fakeClock";
 
-export { CancelledError, ConfigError } from "./errors";
+export { CancelledError, ConfigError } from "../lib/errors";
 
 /**
  * サーバーの中の時刻の取得は、すべてこの Clock を通す（基本設計書 9章「時計の差し替え」、BE 詳細設計 world 1章・4章）。
