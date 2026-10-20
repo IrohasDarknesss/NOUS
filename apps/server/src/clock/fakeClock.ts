@@ -1,5 +1,5 @@
 import type { Clock } from "./clock";
-import { CancelledError } from "./errors";
+import { CancelledError } from "../lib/errors";
 
 interface FakeTimer {
   id: number;
