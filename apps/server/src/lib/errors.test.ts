@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { AppError, ConfigError, ERROR_CODES, isAppError } from "./errors.js";
+import { CancelledError as ClockCancelledError, ConfigError as ClockConfigError } from "../clock/clock.js";
+import { ConfigError as GenerationConfigError } from "../config/generationConfig.js";
+import { AppError, CancelledError, ConfigError, ERROR_CODES, isAppError } from "./errors.js";
 
 // 基本設計書 概要 7章と BE 詳細設計（admin_auth・admin_data・generation・observer・world）に出るエラーコード
 const DESIGN_CODES: Record<string, number> = {
@@ -72,5 +74,23 @@ describe("errors", () => {
     expect(err.problems).toEqual(["config/generation.json を読めません"]);
     expect(err.cause).toBe(cause);
     expect(err.name).toBe("ConfigError");
+  });
+
+  it("TC-NOUS76_DEV-01 clock・generationConfig が使う ConfigError は lib/errors.ts のものと同じ", () => {
+    expect(ClockConfigError).toBe(ConfigError);
+    expect(GenerationConfigError).toBe(ConfigError);
+  });
+
+  it("TC-NOUS76_DEV-02 clock が使う CancelledError は lib/errors.ts のものと同じ", () => {
+    expect(ClockCancelledError).toBe(CancelledError);
+  });
+
+  it("TC-NOUS76_DEV-03 CancelledError の既定の文言と name、cause を持つ", () => {
+    const cause = new Error("abort");
+    const err = new CancelledError(undefined, { cause });
+    expect(err.message).toBe("cancelled");
+    expect(err.name).toBe("CancelledError");
+    expect(err.cause).toBe(cause);
+    expect(new CancelledError("待ちを打ち切りました").message).toBe("待ちを打ち切りました");
   });
 });

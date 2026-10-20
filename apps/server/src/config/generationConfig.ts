@@ -2,14 +2,10 @@
 // 行動生成とプロンプトの設計 3・4・9章）。起動時に1回だけ読み、変更はプロセスの再起動で反映する
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { ConfigError } from "../lib/errors.js";
 
-/** 設定の誤り。起動を止める */
-export class ConfigError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.name = "ConfigError";
-  }
-}
+// 外から使う人のために再 export しておく（定義は lib/errors.ts の1か所）
+export { ConfigError };
 
 const probability = z.number().min(0).max(1);
 const weight = z.number().min(0);
