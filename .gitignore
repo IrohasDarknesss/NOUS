@@ -4,3 +4,5 @@ build/
 data/
 logs/
 .env.local
+test-results/
+playwright-report/

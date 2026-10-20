@@ -19,9 +19,18 @@
     "admin:set-password": "pnpm --filter @nous/server admin:set-password"
   },
   "devDependencies": {
-    "typescript": "5.6.3",
+    "@playwright/test": "1.48.2",
+    "@types/node": "22.20.5",
     "eslint": "9.13.0",
     "prettier": "3.3.3",
-    "typescript-eslint": "8.11.0"
+    "typescript": "5.6.3",
+    "typescript-eslint": "8.11.0",
+    "vitest": "2.1.9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
   }
 }
