@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { CancelledError as SleepCancelledError } from "../lib/errors.js";
 import { CancelledError, createLlmError, type LlmClient, type LlmRequest, type LlmResult } from "./llmClient.js";
 
 /**
@@ -139,7 +140,8 @@ export class FixedClient implements LlmClient {
       try {
         await clock.sleep(fixture.delayMs, req.signal);
       } catch (e) {
-        if (req.signal.aborted) {
+        // 時計の取り消し（lib の CancelledError）は、LLM の CancelledError（kind=cancelled）に変換する
+        if (e instanceof SleepCancelledError || req.signal.aborted) {
           throw cancelled(e);
         }
         throw e;

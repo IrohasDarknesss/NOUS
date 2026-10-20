@@ -74,9 +74,17 @@ export function isAppError(err: unknown): err is AppError {
   return err instanceof AppError;
 }
 
+/** Clock.sleep の待ちが signal の abort で打ち切られた（BE 詳細設計 world 4章・generation 2章） */
+export class CancelledError extends Error {
+  constructor(message = "cancelled", options: { cause?: unknown } = {}) {
+    super(message, options);
+    this.name = "CancelledError";
+  }
+}
+
 /**
  * 設定の誤り（環境変数の不正、production での fake の時計、generation.json の不正など）。起動を止める。
- * 問題が1つなら文字列、複数なら配列で渡す（clock・generationConfig の仮置きの ConfigError と同じ呼び方ができる）
+ * 問題が1つなら文字列、複数なら配列で渡す
  */
 export class ConfigError extends Error {
   readonly problems: string[];
