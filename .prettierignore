@@ -1,0 +1,6 @@
+docs/
+fixtures/
+data/
+logs/
+build/
+pnpm-lock.yaml
