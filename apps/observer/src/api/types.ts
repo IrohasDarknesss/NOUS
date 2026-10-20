@@ -1,0 +1,21 @@
+// 観察画面が使う API の型（packages/shared の型を再公開する）
+export type {
+  AgentPostsQuery,
+  AgentPostsResponse,
+  AgentProfileView,
+  AgentSummary,
+  ApiErrorBody,
+  CursorPage,
+  ErrorCode,
+  FollowItem,
+  FollowsResponse,
+  FollowType,
+  PostRef,
+  PostView,
+  ThreadNode,
+  ThreadQuery,
+  ThreadView,
+  TimelinePage,
+  TimelineQuery,
+  WorldView,
+} from "@nous/shared";

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CancelledError as ClockCancelledError } from "../lib/errors.js";
 import { createFixedClient, FixtureError, fixturePath, NONE_RESPONSE_TEXT, type LlmClock } from "./fixedClient.js";
 import {
   CancelledError,
@@ -179,5 +180,28 @@ describe("fixturePath", () => {
     ["../basic", { handle: "minato", cycleNo: 1 }],
   ])("TC-NOUS47_DEV-32 パスの外へ出る値・不正な値は FixtureError（%s・%o）", (scenario, key) => {
     expect(() => fixturePath("fixtures/llm", scenario, key)).toThrow(FixtureError);
+  });
+});
+
+describe("fixedClient と時計の取り消し", () => {
+  it("TC-NOUS76_DEV-04 時計が lib の CancelledError で拒否したら、LLM の CancelledError（kind=cancelled）に変換する", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nous76-"));
+    try {
+      await mkdir(join(dir, "s1"), { recursive: true });
+      await writeFile(join(dir, "s1", "sora-1.json"), JSON.stringify({ text: "x", delayMs: 8000 }));
+      const cancellingClock: LlmClock = {
+        now: () => new Date(0),
+        sleep: async () => {
+          throw new ClockCancelledError();
+        },
+      };
+      const client = createFixedClient({ fixtureDir: dir, scenario: "s1", clock: cancellingClock });
+      const error = await client.generate(request("sora", 1)).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(CancelledError);
+      expect((error as CancelledError).kind).toBe("cancelled");
+      expect((error as CancelledError).cause).toBeInstanceOf(ClockCancelledError);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
