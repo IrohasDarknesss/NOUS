@@ -1,8 +1,8 @@
 node_modules/
 dist/
 build/
-data/
-logs/
+/data/
+/logs/
 .env.local
 test-results/
 playwright-report/
