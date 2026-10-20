@@ -2,8 +2,11 @@
   "name": "nous",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "packageManager": "pnpm@9.12.0",
-  "engines": { "node": ">=22.11 <23" },
+  "engines": {
+    "node": ">=22.11 <23"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build && pnpm audit --prod > build/audit.txt",

@@ -1,1 +1,10 @@
-{ "name": "@nous/server", "private": true, "version": "0.0.0", "type": "module", "scripts": { "typecheck": "tsc --noEmit -p .", "test": "echo \"no tests yet\"" } }
+{
+  "name": "@nous/server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "echo \"no tests yet\""
+  }
+}
