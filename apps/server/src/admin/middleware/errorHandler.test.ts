@@ -57,7 +57,7 @@ describe("errorHandler", () => {
     expect(log.err.stack).toContain("secret detail");
   });
 
-  it("TC-NOUS52_DEV-12 SqliteError は SQL の文を出さずに 500 にする（UNIQUE の違反も CONFLICT は使わない）", () => {
+  it("TC-NOUS52_DEV-12 SqliteError の UNIQUE の違反は SQL の文を出さずに 409 CONFLICT にする", () => {
     const t = createTestDb();
     try {
       const row = { world_id: "01JB0000000000000000000001", name: "世界", created_at: "2026-10-20T00:00:00.000Z" };
@@ -70,10 +70,32 @@ describe("errorHandler", () => {
       }
       const captured = captureLogger();
       const appError = toAppError(caught, captured.logger, "/x");
-      expect(appError.code).toBe("INTERNAL_ERROR");
+      expect(appError.code).toBe("CONFLICT");
+      expect(appError.status).toBe(409);
       const log = captured.lines()[0] as Record<string, unknown>;
       expect(log).toMatchObject({ level: "error", msg: "sqlite_error", uniqueViolation: true });
       expect(JSON.stringify(log)).not.toContain("INSERT");
+    } finally {
+      t.cleanup();
+    }
+  });
+
+  it("TC-NOUS52_DEV-23 UNIQUE 以外の SqliteError（CHECK の違反）は 500 INTERNAL_ERROR にする", () => {
+    const t = createTestDb();
+    try {
+      let caught: unknown;
+      try {
+        t.db
+          .insert(worlds)
+          .values({ world_id: "01JB0000000000000000000001", name: "世界", created_at: "not-a-date" })
+          .run();
+      } catch (err) {
+        caught = err;
+      }
+      const captured = captureLogger();
+      const appError = toAppError(caught, captured.logger, "/x");
+      expect(appError.code).toBe("INTERNAL_ERROR");
+      expect(captured.lines()[0]).toMatchObject({ level: "error", msg: "sqlite_error", uniqueViolation: false });
     } finally {
       t.cleanup();
     }

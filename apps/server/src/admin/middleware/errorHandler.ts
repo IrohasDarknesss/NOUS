@@ -45,10 +45,10 @@ export function toAppError(err: unknown, logger: Logger, path: string): AppError
   }
   const sqlite = findSqliteError(err);
   if (sqlite) {
-    // 6章では UNIQUE の違反は 409 CONFLICT だが、CONFLICT は設計書に足すまで使わない（NOUS-44 の再鑑の指示）。
-    // それまでは他の SqliteError と同じ 500 にする。UNIQUE の違反は、各サービスが事前に確かめて業務のコードで返す
-    logger.error("sqlite_error", { code: sqlite.code, path, uniqueViolation: isUniqueViolation(sqlite.code) });
-    return new AppError("INTERNAL_ERROR", { cause: err });
+    // 6章：UNIQUE の違反は 409 CONFLICT、それ以外は 500。SQL の文は出さない
+    const uniqueViolation = isUniqueViolation(sqlite.code);
+    logger.error("sqlite_error", { code: sqlite.code, path, uniqueViolation });
+    return new AppError(uniqueViolation ? "CONFLICT" : "INTERNAL_ERROR", { cause: err });
   }
   logger.error("unexpected_error", { path, err });
   return new AppError("INTERNAL_ERROR", { cause: err });
