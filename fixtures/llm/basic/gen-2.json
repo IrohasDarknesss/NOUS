@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"reply\", \"target\": \"P1\", \"text\": \"手入れの時間は、道具と話している時間でもある。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 30,
+    "neurons": 14.0
+  }
+}

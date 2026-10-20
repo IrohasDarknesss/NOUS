@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"reply\", \"target\": \"P1\", \"text\": \"季節の進み方を匂いで知るのは、いい感覚だと思う。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 31,
+    "neurons": 14.0
+  }
+}

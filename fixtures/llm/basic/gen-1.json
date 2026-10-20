@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"古い道具を手入れしていたら、昼を過ぎていた。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 30,
+    "neurons": 14.0
+  }
+}

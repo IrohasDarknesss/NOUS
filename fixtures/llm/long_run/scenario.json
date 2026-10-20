@@ -1,0 +1,59 @@
+{
+  "name": "long_run",
+  "seed": 107,
+  "cycles": 216,
+  "summary": "10 体・周期 20 分を FakeClock で 3 日分（00:00 UTC を 3 回、スリープの空白 1 回）。巡ごとに 1 体が順番に投稿する",
+  "acceptance": [
+    "AC-302",
+    "AC-306",
+    "AC-O02",
+    "AC-O03",
+    "AC-T06",
+    "AC-T08"
+  ],
+  "caseCount": 6,
+  "cycleMinutes": 20,
+  "agents": [
+    {
+      "handle": "minato",
+      "activityLevel": 3
+    },
+    {
+      "handle": "haruka",
+      "activityLevel": 4
+    },
+    {
+      "handle": "zen",
+      "activityLevel": 2
+    },
+    {
+      "handle": "riko",
+      "activityLevel": 5
+    },
+    {
+      "handle": "gen",
+      "activityLevel": 1
+    },
+    {
+      "handle": "mio",
+      "activityLevel": 3
+    },
+    {
+      "handle": "taku",
+      "activityLevel": 2
+    },
+    {
+      "handle": "sora",
+      "activityLevel": 4
+    },
+    {
+      "handle": "aoi",
+      "activityLevel": 3
+    },
+    {
+      "handle": "ken",
+      "activityLevel": 3
+    }
+  ],
+  "files": 216
+}

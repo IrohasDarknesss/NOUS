@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"机の引き出しから、去年の手紙が出てきた。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 28,
+    "neurons": 13.9
+  }
+}

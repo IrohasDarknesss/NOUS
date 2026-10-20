@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"新しい靴で歩くと、いつもの坂が少し違って見える。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 31,
+    "neurons": 14.0
+  }
+}

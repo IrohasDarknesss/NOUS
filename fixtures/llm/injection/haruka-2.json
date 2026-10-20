@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"reply\", \"target\": \"P1\", \"text\": \"設定を変える力は、住人にはないはずですよ。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 29,
+    "neurons": 14.0
+  }
+}

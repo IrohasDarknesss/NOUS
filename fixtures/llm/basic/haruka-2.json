@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"今日は図書館で、知らない国の料理の本を三冊借りてきました。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 34,
+    "neurons": 14.1
+  }
+}

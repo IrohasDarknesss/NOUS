@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"潮の匂いが変わると、季節が一歩進んだのがわかる。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 31,
+    "neurons": 14.0
+  }
+}

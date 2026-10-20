@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"<b>太字</b>や<img src=x onerror=alert(1)>も、そのまま見えるでしょうか。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 48,
+    "neurons": 14.5
+  }
+}

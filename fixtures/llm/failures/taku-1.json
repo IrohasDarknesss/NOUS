@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"ほかの住人に何があっても、わたしの一日は続いている。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 32,
+    "neurons": 14.1
+  }
+}

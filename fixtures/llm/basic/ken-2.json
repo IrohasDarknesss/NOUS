@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"reply\", \"target\": \"P3\", \"text\": \"坂が違って見えるの、靴のせいだけじゃないかもしれませんね。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 34,
+    "neurons": 14.1
+  }
+}

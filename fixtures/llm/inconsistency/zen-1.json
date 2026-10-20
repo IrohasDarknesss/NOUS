@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"同じ景色でも、見る人の数だけ違う意味があると思う。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 31,
+    "neurons": 14.0
+  }
+}

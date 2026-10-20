@@ -1,0 +1,8 @@
+{
+  "text": "{\"action\": \"post\", \"target\": null, \"text\": \"白い鳥の名前を調べたら、思ったより長い名前でした。\"}",
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 31,
+    "neurons": 14.0
+  }
+}
