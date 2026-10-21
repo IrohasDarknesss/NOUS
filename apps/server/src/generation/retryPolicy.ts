@@ -57,6 +57,8 @@ export type RetryContext = {
   eventId: string;
   clock: Clock;
   signal: AbortSignal;
+  /** 再試行の待ちだけを打ち切る signal（一時停止・上限停止用） */
+  stopSignal?: AbortSignal;
   shouldContinue: () => boolean;
   logger: Logger;
   /** world_settings が DB に無い単体テスト用のフォールバック */
@@ -81,15 +83,40 @@ export function isCancellation(err: unknown, signal?: AbortSignal): boolean {
 }
 
 /**
- * 指定ミリ秒だけ待つ。途中で signal が abort されたら CancelledError を投げる（4章 waitOrStop）。
+ * 指定ミリ秒だけ待つ。途中で signal が abort されたら CancelledError、stopSignal なら StoppedError を投げる（4章 waitOrStop）。
  */
-export async function waitOrStop(ms: number, signal: AbortSignal, clock: Clock): Promise<void> {
+export async function waitOrStop(
+  ms: number,
+  signal: AbortSignal,
+  clock: Clock,
+  stopSignal?: AbortSignal,
+): Promise<void> {
   if (signal.aborted) {
     throw new ClockCancelledError();
   }
-  await clock.sleep(ms, signal);
+  if (stopSignal?.aborted) {
+    throw new StoppedError();
+  }
+
+  const combinedSignal = stopSignal ? AbortSignal.any([signal, stopSignal]) : signal;
+
+  try {
+    await clock.sleep(ms, combinedSignal);
+  } catch (err) {
+    if (signal.aborted) {
+      throw new ClockCancelledError();
+    }
+    if (stopSignal?.aborted) {
+      throw new StoppedError();
+    }
+    throw err;
+  }
+
   if (signal.aborted) {
     throw new ClockCancelledError();
+  }
+  if (stopSignal?.aborted) {
+    throw new StoppedError();
   }
 }
 
@@ -209,7 +236,7 @@ export async function callWithRetry(call: () => Promise<LlmResult>, ctx: RetryCo
       }
 
       const delayMs = RETRY_DELAYS_MS[retryIndex]!;
-      await waitOrStop(delayMs, ctx.signal, ctx.clock);
+      await waitOrStop(delayMs, ctx.signal, ctx.clock, ctx.stopSignal);
 
       const nowDate = utcDate(ctx.clock.now());
       const settings = loadLimitsSettings(ctx.db, ctx.worldId, ctx.settings);

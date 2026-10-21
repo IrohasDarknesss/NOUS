@@ -45,6 +45,8 @@ export type OpportunityContext = {
   cycleNo: number;
   cycleSeed: number;
   signal: AbortSignal;
+  /** 再試行の待ちだけを打ち切る signal（一時停止・上限停止用） */
+  stopSignal?: AbortSignal;
   shouldContinue: () => boolean;
   /** テスト用：プロンプトのテンプレートのディレクトリを上書きする */
   promptsDir?: string;
@@ -289,6 +291,7 @@ export async function generateAndValidate(
         eventId,
         clock: ctx.clock,
         signal: ctx.signal,
+        stopSignal: ctx.stopSignal,
         shouldContinue: ctx.shouldContinue,
         logger: ctx.logger,
         settings: limitsSettings,

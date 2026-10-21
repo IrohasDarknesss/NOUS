@@ -366,4 +366,128 @@ describe("retryPolicy（4章 callWithRetry・waitOrStop・6章）", () => {
     const attempt = t.db.select().from(generation_attempts).where(eq(generation_attempts.event_id, eventId)).get();
     expect(attempt?.result).toBe("cancelled");
   });
+
+  it("TC-NOUS83_DEV-01 waitOrStop は待機前または待機中に stopSignal が abort されたら StoppedError を投げる", async () => {
+    // 待機前に stopSignal が abort されている場合
+    const preStopped = new AbortController();
+    preStopped.abort();
+    const signal1 = new AbortController().signal;
+    await expect(waitOrStop(30_000, signal1, clock, preStopped.signal)).rejects.toBeInstanceOf(StoppedError);
+
+    // 待機中に stopSignal が abort された場合（clock.advance しなくても即座に StoppedError）
+    const stopCtrl = new AbortController();
+    const signal2 = new AbortController().signal;
+    const waitPromise = waitOrStop(30_000, signal2, clock, stopCtrl.signal);
+    stopCtrl.abort();
+    await expect(waitPromise).rejects.toBeInstanceOf(StoppedError);
+  });
+
+  it("TC-NOUS83_DEV-02 waitOrStop は signal と stopSignal の両方が abort された場合は signal を優先して CancelledError を投げる", async () => {
+    // 待機前に両方 abort されている場合
+    const signal1 = new AbortController();
+    signal1.abort();
+    const stopCtrl1 = new AbortController();
+    stopCtrl1.abort();
+    await expect(waitOrStop(30_000, signal1.signal, clock, stopCtrl1.signal)).rejects.toBeInstanceOf(
+      ClockCancelledError,
+    );
+
+    // 待機中に両方 abort された場合
+    const signal2 = new AbortController();
+    const stopCtrl2 = new AbortController();
+    const waitPromise = waitOrStop(30_000, signal2.signal, clock, stopCtrl2.signal);
+    stopCtrl2.abort();
+    signal2.abort();
+    await expect(waitPromise).rejects.toBeInstanceOf(ClockCancelledError);
+  });
+
+  it("TC-NOUS83_DEV-03 callWithRetry は一時的な失敗の再試行待ちの途中で stopSignal が abort されたら時計を進めずに StoppedError になり試行は1件だけ記録される", async () => {
+    const controller = new AbortController();
+    const stopController = new AbortController();
+    let callCount = 0;
+
+    const promise = callWithRetry(
+      async () => {
+        callCount += 1;
+        throw new TimeoutError("timeout 1", { detail: "timed out 60s" });
+      },
+      {
+        db: t.db,
+        worldId,
+        eventId,
+        clock,
+        signal: controller.signal,
+        stopSignal: stopController.signal,
+        shouldContinue: () => true,
+        logger: makeLogger(),
+      },
+    );
+
+    // 時計を進めずに stopSignal を abort する
+    stopController.abort();
+    await expect(promise).rejects.toBeInstanceOf(StoppedError);
+
+    expect(callCount).toBe(1);
+    const attempts = t.db.select().from(generation_attempts).where(eq(generation_attempts.event_id, eventId)).all();
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      attempt_no: 1,
+      result: "timeout",
+      error_detail: "timed out 60s",
+    });
+  });
+
+  it("TC-NOUS83_DEV-04 callWithRetry は stopSignal が渡されない場合は従来どおり再試行の待ちを完了して動作する", async () => {
+    const controller = new AbortController();
+    let callCount = 0;
+
+    const promise = callWithRetry(
+      async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          throw new TimeoutError("timeout 1");
+        }
+        return OK_RESULT;
+      },
+      {
+        db: t.db,
+        worldId,
+        eventId,
+        clock,
+        signal: controller.signal,
+        shouldContinue: () => true,
+        logger: makeLogger(),
+      },
+    );
+
+    await clock.advance(30_000);
+    const res = await promise;
+    expect(res.attemptNo).toBe(2);
+    expect(res.result).toEqual(OK_RESULT);
+  });
+
+  it("TC-NOUS83_DEV-05 callWithRetry は LLM 呼び出しの最中に stopSignal が abort されても呼び出し完了を待つ", async () => {
+    const controller = new AbortController();
+    const stopController = new AbortController();
+
+    const res = await callWithRetry(
+      async () => {
+        // 呼び出し中に stopSignal が abort される
+        stopController.abort();
+        return OK_RESULT;
+      },
+      {
+        db: t.db,
+        worldId,
+        eventId,
+        clock,
+        signal: controller.signal,
+        stopSignal: stopController.signal,
+        shouldContinue: () => true,
+        logger: makeLogger(),
+      },
+    );
+
+    expect(res.result).toEqual(OK_RESULT);
+  });
 });
