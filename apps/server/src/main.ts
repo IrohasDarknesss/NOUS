@@ -1,26 +1,32 @@
 // プロセスの起動と終了（BE 詳細設計 world 1章・4章・5章・6章、基本設計書 概要 1章・9章・10章）
 // 起動の順：B07 recoverOnStartup → B06 runBackup → 両サーバー（startObserverServer・startAdminServer）→ Scheduler
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ServerType } from "@hono/node-server";
 import { startAdminServer, type StartAdminServerOptions } from "./admin/adminServer";
 import type { AdminDeps } from "./admin/context";
 import { createClock, type Clock } from "./clock/clock";
+import { loadGenerationConfig } from "./config/generationConfig";
 import { closeDb, openDb, type Db } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { withTx } from "./db/tx";
 import { loadEnv, type AppEnv } from "./lib/env";
 import { createLogger, type Logger } from "./lib/logger";
+import { createLlmClient } from "./llm/createLlmClient";
 import { startObserverServer, type StartObserverServerOptions } from "./observer/observerServer";
 import { runBackup } from "./scheduler/backup";
 import { scheduleDayRollover } from "./scheduler/dayRollover";
 import { scheduleHeartbeat } from "./scheduler/heartbeat";
+import { createScheduler } from "./scheduler/scheduler";
 import { recoverOnStartup } from "./scheduler/startupRecovery";
 import { configureWorldApi } from "./world/worldRoutes";
 import { createInitialWorld, findCurrentWorld, type SchedulerControl } from "./world/worldService";
 
+/** リポジトリ直下の config/generation.json（apps/server/src から 3 つ上） */
+const DEFAULT_GENERATION_CONFIG_PATH = fileURLToPath(new URL("../../../config/generation.json", import.meta.url));
+
 /**
- * アプリケーション全体の Scheduler のインタフェース。
- * TODO(NOUS-59): scheduler/scheduler.ts の実装後にその型と実装をつなぐ
+ * アプリケーション全体の Scheduler のインタフェース。既定の実装は scheduler/scheduler.ts の createScheduler
+ * （その Scheduler はこれに runningCount などを足したもの）。テストでは createScheduler で差し替える
  */
 export interface AppScheduler extends SchedulerControl {
   start(): void;
@@ -47,23 +53,6 @@ export interface RunningApp {
   logger: Logger;
   scheduler: AppScheduler;
   close(): Promise<void>;
-}
-
-/**
- * NOUS-59 までの仮の Scheduler スタブ。
- * TODO(NOUS-59): scheduler/scheduler.ts ができたら本物の Scheduler に置き換える
- */
-function createStubScheduler(logger: Logger): AppScheduler {
-  return {
-    start(): void {
-      logger.warn("Scheduler は NOUS-59 で実装");
-    },
-    async stop(): Promise<void> {},
-    async stopAll(): Promise<number> {
-      return 0;
-    },
-    wake(): void {},
-  };
 }
 
 function isNodeServer(handle: ServerHandle): handle is ServerType {
@@ -116,19 +105,30 @@ export async function startApp(options: StartAppOptions = {}): Promise<RunningAp
     }
 
     // Scheduler は管理 API（世界の操作）が使うので、サーバーより前に用意して configureWorldApi に渡す。
-    // 動かし始める（start）のは両サーバーの後
-    // TODO(NOUS-59): scheduler/scheduler.ts の実装後に既定の Scheduler をつなぐ
-    const scheduler = options.createScheduler
-      ? options.createScheduler({ db, clock, logger })
-      : createStubScheduler(logger);
-    configureWorldApi({ scheduler });
+    // 動かし始める（start）のは両サーバーの後。generation.json は起動時に1回だけ読む（generation 4章 loadGenerationConfig）
+    let scheduler: AppScheduler;
+    if (options.createScheduler) {
+      scheduler = options.createScheduler({ db, clock, logger });
+      configureWorldApi({ scheduler });
+    } else {
+      const generationConfig = loadGenerationConfig(DEFAULT_GENERATION_CONFIG_PATH);
+      scheduler = createScheduler({
+        db,
+        clock,
+        logger: logger.child({ module: "scheduler" }),
+        llm: createLlmClient(env, { clock }),
+        config: generationConfig,
+        llmMode: env.llmMode,
+      });
+      configureWorldApi({ scheduler, generationConfig });
+    }
 
     const startObserver = options.startObserver ?? startObserverServer;
     const startAdmin = options.startAdmin ?? startAdminServer;
     const observerServer = startObserver(db, clock, env.observerPort, { logger });
     const adminServer = startAdmin({ db, clock, logger }, env.adminPort);
 
-    // TODO(NOUS-59): 設計（world 4章 Scheduler.start）では Scheduler.start が B08・B02 のタイマーを張るので、NOUS-59 で Scheduler に移すか整理する
+    // B08・B02 のタイマーは Scheduler.start ではなくここで張る（NOUS-59 で整理。Scheduler.start は B01 の loop を始めるだけ）
     const stopHeartbeat = scheduleHeartbeat({ db, clock, scheduler, logger });
     const stopDayRollover = scheduleDayRollover({
       db,
