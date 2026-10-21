@@ -82,6 +82,7 @@ describe("worldArchiveRoutes (/admin/api/worlds*)", () => {
     body = "テスト本文",
     visibility: "public" | "hidden" = "public",
     worldTimeSec = 10,
+    replyToPostId?: string | null,
   ): string {
     const postId = newUlid(clock.nowMs());
     const eventId = newUlid(clock.nowMs());
@@ -112,8 +113,9 @@ describe("worldArchiveRoutes (/admin/api/worlds*)", () => {
         world_id: worldId,
         agent_id: agentId,
         body,
-        root_post_id: postId,
-        depth: 0,
+        root_post_id: replyToPostId ?? postId,
+        reply_to_post_id: replyToPostId ?? null,
+        depth: replyToPostId ? 1 : 0,
         visibility,
         world_time_sec: worldTimeSec,
         created_at: iso,
@@ -303,5 +305,49 @@ describe("worldArchiveRoutes (/admin/api/worlds*)", () => {
     const r3 = await a.request(`/admin/api/worlds/${newUlid(clock.nowMs())}/generations`, { headers: authHeaders() });
     expect(r3.status).toBe(404);
     expect(await r3.json()).toMatchObject({ error: { code: "WORLD_NOT_FOUND" } });
+  });
+
+  it("TC-NOUS85_DEV-08 GET /admin/api/worlds/:worldId/posts は全項目の揃った投稿データを正しい形式で返す", async () => {
+    const worldId = newUlid(clock.nowMs());
+    seedWorld(worldId, "アーカイブ世界");
+    const agentId = seedAgent(worldId, "minato", "ミナト");
+
+    const parentId = seedPost(worldId, agentId, "親投稿", "public", 100);
+    const replyId = seedPost(worldId, agentId, "返信投稿", "hidden", 200, parentId);
+
+    const a = app();
+    const res = await a.request(`/admin/api/worlds/${worldId}/posts`, { headers: authHeaders() });
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      items: Array<{
+        postId: string;
+        body: string;
+        visibility: string;
+        worldTimeSec: number;
+        createdAt: string;
+        agent: { agentId: string; displayName: string };
+        replyToPostId: string | null;
+        generationEventId: string | null;
+      }>;
+      nextCursor: string | null;
+    };
+
+    expect(body.items).toHaveLength(2);
+    expect(body.items[0]).toEqual({
+      postId: replyId,
+      body: "返信投稿",
+      visibility: "hidden",
+      worldTimeSec: 200,
+      createdAt: expect.any(String),
+      agent: {
+        agentId,
+        displayName: "ミナト",
+      },
+      replyToPostId: parentId,
+      generationEventId: expect.any(String),
+    });
+    expect(body.items[1]?.replyToPostId).toBeNull();
+    expect(body.nextCursor).toBeNull();
   });
 });
