@@ -324,4 +324,100 @@ describe("Scheduler（world 4章・5章 B01）", () => {
     await createScheduler(d).runDueCycle();
     expect(world()).toMatchObject({ state: "limit_stopped", stop_reason: "free_tier_error" });
   });
+
+  it.each([
+    ["TC-NOUS83_DEV-09", "pause"],
+    ["TC-NOUS83_DEV-10", "limit"],
+  ] as const)(
+    "%s stopAll('%s') は実行中の行動機会の ctx.stopSignal を abort し ctx.signal は abort せずに 0 を返す",
+    async (_id, mode) => {
+      seedAgent(t.db, worldId, "minato");
+      setSettings({ max_concurrency: 1 });
+      const c = controllableRun();
+      const s = createScheduler(deps({ runOpportunity: c.run }));
+      const cycle = s.runDueCycle();
+      await flush();
+
+      expect(c.calls).toHaveLength(1);
+      const ctx = c.calls[0]!;
+      expect(ctx.stopSignal?.aborted).toBe(false);
+      expect(ctx.signal.aborted).toBe(false);
+
+      expect(await s.stopAll(mode)).toBe(0);
+      expect(ctx.stopSignal?.aborted).toBe(true);
+      expect(ctx.signal.aborted).toBe(false);
+
+      c.releaseAll();
+      await cycle;
+    },
+  );
+
+  it("TC-NOUS83_DEV-11 stopAll('emergency') は実行中の行動機会の ctx.signal を abort し取り消した件数を返す", async () => {
+    const a = seedAgent(t.db, worldId, "minato");
+    setSettings({ max_concurrency: 1 });
+    const c = controllableRun();
+    const eventId = seedEvent(t.db, worldId, a);
+    const run = vi.fn(async (ctx: OpportunityContext) => {
+      try {
+        return await c.run(ctx);
+      } finally {
+        t.db
+          .update(generation_events)
+          .set({ status: "cancelled", failure_kind: "cancelled", finished_at: clock.nowIso() })
+          .where(eq(generation_events.event_id, eventId))
+          .run();
+      }
+    });
+    const s = createScheduler(deps({ runOpportunity: run }));
+    const cycle = s.runDueCycle();
+    await flush();
+
+    expect(c.calls).toHaveLength(1);
+    const ctx = c.calls[0]!;
+
+    expect(await s.stopAll("emergency")).toBe(1);
+    expect(ctx.signal.aborted).toBe(true);
+
+    await cycle;
+    expect(s.runningCount()).toBe(0);
+  });
+
+  it("TC-NOUS83_DEV-12 stopAll('pause') により再試行の待ちの途中の行動機会が時計を進めずに stopped で閉じる", async () => {
+    seedAgent(t.db, worldId, "minato");
+    setSettings({ max_concurrency: 1 });
+
+    // 待ちを中断させるため、ctx.stopSignal を監視して待つモック
+    let finishedStatus: OpportunityResult | null = null;
+    const run = vi.fn(async (ctx: OpportunityContext): Promise<OpportunityResult> => {
+      // 待ちの途中で stopSignal が abort されたら stopped で終了する（実際の runOpportunity の挙動のシミュレーション）
+      await new Promise<void>((resolve) => {
+        ctx.stopSignal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+      finishedStatus = {
+        eventId: "01J00000000000000000000000",
+        status: "cancelled",
+        action: null,
+        decidedBy: "llm",
+        neurons: 0,
+        failureKind: "stopped",
+      };
+      return finishedStatus;
+    });
+
+    const s = createScheduler(deps({ runOpportunity: run }));
+    const cycle = s.runDueCycle();
+    await flush();
+
+    expect(s.runningCount()).toBe(1);
+
+    // 時計を進めずに stopAll("pause") を実行
+    await s.stopAll("pause");
+    await cycle;
+
+    expect(finishedStatus).toMatchObject({
+      status: "cancelled",
+      failureKind: "stopped",
+    });
+    expect(s.runningCount()).toBe(0);
+  });
 });

@@ -569,4 +569,88 @@ describe("opportunityRunner（2章・4章・6章 runOpportunity）", () => {
     });
     expect(logLines.some((line) => line.includes("Unexpected error in runOpportunity"))).toBe(true);
   });
+
+  it("TC-NOUS83_DEV-06 runOpportunity は一時的な失敗の再試行待ちの途中で stopSignal が abort されたら時計を進めずに status=cancelled かつ failureKind=stopped で閉じる", async () => {
+    const stopController = new AbortController();
+    let callCount = 0;
+    const llm: LlmClient = {
+      async generate() {
+        callCount += 1;
+        throw new RateLimitedError("429", { httpStatus: 429 });
+      },
+    };
+
+    const promise = runOpportunity(
+      makeCtx(llm, {
+        stopSignal: stopController.signal,
+      }),
+    );
+
+    // 時計を進めずに stopSignal を abort する
+    stopController.abort();
+    const res = await promise;
+
+    expect(res).toMatchObject({
+      status: "cancelled",
+      failureKind: "stopped",
+      action: null,
+      decidedBy: "llm",
+    });
+    expect(callCount).toBe(1);
+
+    const event = t.db
+      .select()
+      .from(generation_events)
+      .where(eq(generation_events.event_id, res.eventId ?? ""))
+      .get();
+    expect(event).toMatchObject({
+      status: "cancelled",
+      failure_kind: "stopped",
+    });
+  });
+
+  it("TC-NOUS83_DEV-07 runOpportunity は stopSignal が渡されない場合でも従来どおり shouldContinue の停止で stopped で閉じる", async () => {
+    let shouldCont = true;
+    const llm: LlmClient = {
+      async generate() {
+        throw new RateLimitedError("429", { httpStatus: 429 });
+      },
+    };
+
+    const promise = runOpportunity(
+      makeCtx(llm, {
+        shouldContinue: () => shouldCont,
+      }),
+    );
+    shouldCont = false;
+    await clock.advance(30_000);
+    const res = await promise;
+    expect(res).toMatchObject({
+      status: "cancelled",
+      failureKind: "stopped",
+    });
+  });
+
+  it("TC-NOUS83_DEV-08 runOpportunity は LLM 呼び出し中に stopSignal が abort されても中止せず完了して succeeded で閉じる", async () => {
+    const stopController = new AbortController();
+    const llm: LlmClient = {
+      async generate() {
+        // LLM 呼び出し中に stopSignal が abort される
+        stopController.abort();
+        return makeLlmResult('{"action":"post","target":null,"text":"港の風が心地よい朝です。"}');
+      },
+    };
+
+    const res = await runOpportunity(
+      makeCtx(llm, {
+        stopSignal: stopController.signal,
+      }),
+    );
+
+    expect(res).toMatchObject({
+      status: "succeeded",
+      action: "post",
+      failureKind: null,
+    });
+  });
 });

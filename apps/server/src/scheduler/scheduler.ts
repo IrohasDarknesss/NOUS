@@ -65,7 +65,11 @@ export interface Scheduler extends SchedulerControl {
   runDueCycle(): Promise<boolean>;
 }
 
-type InFlight = { controller: AbortController; done: Promise<void> };
+type InFlight = {
+  controller: AbortController;
+  stopController: AbortController;
+  done: Promise<void>;
+};
 
 /** 種から作る乱数で並べ替える（Fisher–Yates）。同じ種なら同じ順 */
 export function shuffleBySeed<T>(items: readonly T[], seed: number): T[] {
@@ -137,7 +141,8 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   /** 1 件の行動機会。FreeTierExceededError と上限の超過は上限停止にする */
   async function runOne(worldId: string, agentId: string, cycleNo: number, cycleSeed: number): Promise<void> {
     const controller = new AbortController();
-    const entry: InFlight = { controller, done: Promise.resolve() };
+    const stopController = new AbortController();
+    const entry: InFlight = { controller, stopController, done: Promise.resolve() };
     entry.done = (async () => {
       try {
         await run({
@@ -152,6 +157,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
           cycleNo,
           cycleSeed,
           signal: controller.signal,
+          stopSignal: stopController.signal,
           shouldContinue: () => !closed && !stopRequested && isWorldRunning(worldId),
           ...(deps.promptsDir !== undefined ? { promptsDir: deps.promptsDir } : {}),
         });
@@ -276,10 +282,13 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
   /** 4章 stopAll。emergency のとき、取り消した生成イベントの数を返す */
   async function stopAll(mode: StopMode): Promise<number> {
-    // 1. 新規の割り当てを止める（shouldContinue も false を返すので、再試行の待ちの後に打ち切られる）
+    // 1. 新規の割り当てを止める（shouldContinue も false を返す）。pause・limit は再試行の待ちも stopSignal で打ち切る（NOUS-83）
     stopRequested = true;
     wake();
-    if (mode !== "emergency") return 0;
+    if (mode !== "emergency") {
+      for (const entry of inFlight) entry.stopController.abort();
+      return 0;
+    }
 
     // 2. 実行中の AbortController をすべて abort し、最大 5 秒待つ
     const before = new Set(runningEventIds());
