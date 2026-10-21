@@ -14,8 +14,15 @@ import {
 } from "../agents/agentService";
 import type { AdminEnv } from "../context";
 import { moderationRoutes } from "../moderation/moderationRoutes";
+import { generationRoutes } from "./generationRoutes";
+import { metricsRoutes } from "./metricsRoutes";
+import { worldArchiveRoutes } from "./worldArchiveRoutes";
 
 export const dataRoutes = new Hono<AdminEnv>();
+
+dataRoutes.route("/", generationRoutes);
+dataRoutes.route("/", metricsRoutes);
+dataRoutes.route("/", worldArchiveRoutes);
 
 async function parseJsonBody(c: Context<AdminEnv>): Promise<unknown> {
   try {
