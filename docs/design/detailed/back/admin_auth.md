@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 |---|---|
 | 文書番号 | DD-NOUS-BE-ADMIN-AUTH |
-| 版数 | v1 |
+| 版数 | v1.1 |
 | 作成日 | 2026-10-21 |
 | 作成者 | Takaya Ishikawa（開発担当） |
 | レビュー担当 | Kouhei Tajima（再鑑担当） |
@@ -15,6 +15,7 @@
 | 版数 | 日付 | 変更内容 | 変更者 |
 |---|---|---|---|
 | v1 | 2026-10-21 | 初版作成 | Takaya Ishikawa |
+| v1.1 | 2026-10-21 | POST /admin/api/invitations に招待の上限（失効していない招待は 5 件まで。要件定義書 Q-105 の回答）と 409 CONFLICT を追加し、3章に countActiveInvitations、4章の issueInvitation に上限の確認を追加（NOUS-54 の再鑑での指摘。NOUS-81） | Takaya Ishikawa |
 
 ---
 
@@ -230,13 +231,15 @@ sequenceDiagram
 | 401 | 未認証 |
 | 403 | CSRF の不一致 |
 | 409 | LAN のアドレスが見つからない（LAN_ADDRESS_NOT_FOUND。招待リンクを作れない） |
+| 409 | 失効していない招待がすでに 5 件ある（CONFLICT。message は「招待は 5 名までです。使わない招待を失効させてから発行してください」） |
 | 500 | サーバー内部エラー |
 
 * **ビジネスロジック・副作用**:
   1. getLanAddress。null なら 409 LAN_ADDRESS_NOT_FOUND
   2. randomToken(32) でトークンを作り、sha256Hex で token_hash を求める
-  3. invitations に1行作り、recordAudit(invitation.issue, after_json に invitationId と label。トークンは含めない) を同じトランザクションで残す
-  4. inviteUrl を組み立てて返す。トークンはログに出さない
+  3. トランザクションの中で countActiveInvitations（revoked_at IS NULL の件数）を数える。5 件以上なら 409 CONFLICT とし、何も作らない（招待者は 5 名まで。要件定義書 Q-105 の回答。上限の確認と INSERT を同じトランザクションで行い、同時の発行で 6 件目ができないようにする）
+  4. 同じトランザクションで invitations に1行作り、recordAudit(invitation.issue, after_json に invitationId と label。トークンは含めない) を残す
+  5. inviteUrl を組み立てて返す。トークンはログに出さない
 
 ### POST /admin/api/invitations/:invitationId/revoke
 * **概要**: 招待を失効させる
@@ -309,6 +312,7 @@ sequenceDiagram
 | deleteExpiredSessions | admin_sessions | なし | created_at <= 現在−8時間 OR last_seen_at <= 現在−60分 | 一括の DELETE |
 | listInvitations | invitations | なし | 条件なし / ORDER BY issued_at DESC | 該当なし |
 | findInvitationById | invitations | なし | invitation_id = ? | 該当なし |
+| countActiveInvitations | invitations | なし | revoked_at IS NULL の件数（COUNT） | 該当なし（1回） |
 | insertAudit | admin_audit_logs | なし | INSERT のみ | 該当なし |
 | listAuditLogs | admin_audit_logs | なし | (operation = ? を任意) AND (operated_at, audit_id) < (?, ?) / ORDER BY operated_at DESC, audit_id DESC LIMIT ?（idx_audit_operated・idx_audit_operation を使う） | 該当なし |
 
@@ -333,7 +337,7 @@ sequenceDiagram
 | verifyPassword | admin/auth/passwordHasher.ts | password (string), stored (string) | 1. stored を分解 2. 同じパラメータで scrypt 3. timingSafeEqual で比較 | Promise<boolean> | 形式不正は false |
 | setPasswordCli | admin/cli/setPassword.ts | なし（標準入力） | 1. パスワードを2回、エコーなしで読む 2. 一致と 12〜128 字を確かめる 3. hashPassword 4. admin_account がなければ INSERT（表示名 Kaine Yamashiro）、あれば password_hash を UPDATE し failed_count=0 5. 既存のセッションをすべて削除 | void（終了コード 0） | 不一致・長さ不足は終了コード 1 |
 | listInvitationsWithLan | admin/invitations/invitationService.ts | なし | 1. listInvitations 2. getLanAddress | { items, lanAddress } | なし |
-| issueInvitation | admin/invitations/invitationService.ts | label (string), admin (AdminSession) | 1. getLanAddress。null なら LAN_ADDRESS_NOT_FOUND 2. randomToken(32) 3. withTx で INSERT と recordAudit 4. inviteUrl を作る | { invitationId, inviteUrl } | AppError(409) |
+| issueInvitation | admin/invitations/invitationService.ts | label (string), admin (AdminSession) | 1. getLanAddress。null なら LAN_ADDRESS_NOT_FOUND 2. randomToken(32) 3. withTx の中で countActiveInvitations。5 件以上なら CONFLICT 4. 同じ withTx で INSERT と recordAudit 5. inviteUrl を作る | { invitationId, inviteUrl } | AppError(409 LAN_ADDRESS_NOT_FOUND・CONFLICT) |
 | revokeInvitation | admin/invitations/invitationService.ts | invitationId (string), admin (AdminSession) | 1. findInvitationById。なければ 404 2. revoked_at があれば 409 3. withTx で UPDATE と recordAudit | { invitationId, revokedAt } | AppError(404・409) |
 | getLanAddress | admin/invitations/lanAddress.ts | なし | 1. os.networkInterfaces() の IPv4 で internal でないものを集める 2. 192.168/16 → 10/8 → 172.16/12 の順で最初のもの | string または null | なし |
 | recordAudit | admin/audit/auditService.ts | tx (Database), entry ({ adminId, operation, targetType, targetId, before, after, worldId }) | 1. newUlid 2. before・after を JSON.stringify（undefined は NULL） 3. clock.nowIso() を operated_at に 4. INSERT。呼び出し元のトランザクションの中で呼ぶ | void | なし（失敗は呼び出し元の例外としてロールバック） |
