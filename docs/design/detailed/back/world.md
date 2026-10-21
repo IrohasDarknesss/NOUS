@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 |---|---|
 | 文書番号 | DD-NOUS-BE-WORLD |
-| 版数 | v1.2 |
+| 版数 | v1.3 |
 | 作成日 | 2026-10-21 |
 | 作成者 | Takaya Ishikawa（開発担当） |
 | レビュー担当 | Kouhei Tajima（再鑑担当） |
@@ -17,6 +17,7 @@
 | v1 | 2026-10-21 | 初版作成 | Takaya Ishikawa |
 | v1.1 | 2026-10-21 | 第1回レビューの指摘（M-01・m-01）の反映。準備中の世界はリセットできないことに統一 | Takaya Ishikawa |
 | v1.2 | 2026-10-21 | FE admin_control のレビューの指摘（NOUS-35 m-01）の反映。GET /admin/api/settings の応答に activeAgents・avgParticipation を追加 | Takaya Ishikawa |
+| v1.3 | 2026-10-21 | 実装（NOUS-59・NOUS-60）に合わせ、B08・B02 のタイマーは Scheduler.start ではなく main.ts の startApp が張る形に変更。Scheduler.start は B01 の loop を始めるだけとし、4章に startApp・scheduleHeartbeat・scheduleDayRollover を、1章に起動のシーケンスを追加（NOUS-59 で Kouhei Tajima が了承。NOUS-84） | Takaya Ishikawa |
 
 ---
 
@@ -45,10 +46,31 @@ apps/server/src/
 │   ├── backup.ts           # B06
 │   ├── startupRecovery.ts  # B07
 │   └── heartbeat.ts        # B08
-└── main.ts                 # 起動の順（B07 → B06 → 両サーバー → Scheduler）
+└── main.ts                 # startApp：起動の順（B07 → B06 → 両サーバー → B08・B02 のタイマー → Scheduler.start）
 ```
 
-* **処理シーケンス図**:
+* **処理シーケンス図（起動）**: B08・B02 のタイマーは main.ts の startApp が張り、Scheduler.start は B01 の loop を始めるだけとする。
+
+```mermaid
+sequenceDiagram
+    participant M as "main.ts（startApp）"
+    participant DB as "SQLite"
+    participant REC as "recoverOnStartup（B07）"
+    participant BK as "runBackup（B06）"
+    participant SV as "観察サーバー・管理サーバー"
+    participant T as "Clock のタイマー"
+    participant SCH as "Scheduler"
+    M->>DB: "openDb、runMigrations、世界がなければ createInitialWorld"
+    M->>REC: "recoverOnStartup（失敗したら起動を止める）"
+    M->>BK: "runBackup（失敗しても error を記録して続ける）"
+    M->>SCH: "createScheduler、configureWorldApi に渡す"
+    M->>SV: "startObserverServer・startAdminServer"
+    M->>T: "scheduleHeartbeat（B08、60 秒ごと）"
+    M->>T: "scheduleDayRollover（B02、00:00 UTC ごと。B06 は B02 の最後）"
+    M->>SCH: "start（B01 の loop を始める）"
+```
+
+* **処理シーケンス図（緊急停止）**:
 
 ```mermaid
 sequenceDiagram
@@ -374,7 +396,10 @@ sequenceDiagram
 | updateSettings | world/settingsService.ts | input (SettingsInput), admin | 2章 PUT settings の手順 1〜5 | SettingsView と stateChanged | AppError(400) |
 | estimateDaily | world/settingsService.ts | settings, avgNeurons, agents (AgentRow[]), config | 1. 参加の確率の平均 p̄ を、稼働中のエージェントの活動頻度から求める 2. 1巡の LLM の回数 = 体数×活動量×p̄ 3. 1日の巡 = 1440 ÷ 周期 4. 1日の回数と Neurons 5. 周期の下限 = 1440 ÷ (日次上限 ÷ 1巡の Neurons) を切り上げ | { cycleMinutesFloor, dailyRuns, dailyNeurons } | なし |
 | listPromptVersions | world/settingsService.ts | なし | 1. prompts/ の直下のフォルダ名で、system.md と user.md がそろうもの | string[] | なし |
-| Scheduler.start | scheduler/scheduler.ts | なし | 1. B08 のタイマー（60 秒）と、B02・B06 の 00:00 UTC のタイマーを Clock で張る 2. loop を始める | void | なし |
+| startApp | main.ts | options（env・clock・db・logger などの差し替え。省略時は実物） | 1. loadEnv・createLogger・createClock・openDb・runMigrations 2. 現在の世界がなければ createInitialWorld 3. B07 recoverOnStartup（失敗したら起動を止める） 4. B06 runBackup（失敗しても error を記録して続ける） 5. createScheduler を作り configureWorldApi に渡す 6. 観察サーバーと管理サーバーを起動 7. scheduleHeartbeat（B08）と scheduleDayRollover（B02）を張る 8. Scheduler.start | RunningApp（close で、タイマーの解除 → Scheduler.stop → 両サーバー → DB の順に閉じる） | 起動時の例外（ConfigError・AdminBindError・B07 の失敗）はそのまま投げ、起動を止める |
+| scheduleHeartbeat | scheduler/heartbeat.ts | deps ({ db, clock, scheduler, logger }) | 1. Clock の setRepeatingTimer で 60 秒ごとに beat を呼ぶ 2. 例外は記録して止めない | 解除の関数 | なし |
+| scheduleDayRollover | scheduler/dayRollover.ts | deps ({ db, clock, scheduler, backupDir, logger }) | 1. onUtcMidnight で 00:00 UTC ごとに rolloverDay を呼ぶ（B06 は rolloverDay の最後） 2. 例外は記録して止めない | 解除の関数 | なし |
+| Scheduler.start | scheduler/scheduler.ts | なし | 1. B01 の loop を始める（B08・B02 のタイマーは張らない。startApp が張る） | void | なし |
 | Scheduler.loop | scheduler/scheduler.ts | なし | 1. findCurrentWorld 2. running でなければ wake まで待つ 3. next_cycle_at まで Clock.sleep（wake で中断） 4. runCycle 5. next_cycle_at = 巡の開始＋周期、ただし巡の終わりより前なら巡の終わり 6. 1 に戻る | Promise<void>（停止まで続く） | なし（例外は記録して 60 秒後に続ける） |
 | Scheduler.runCycle | scheduler/scheduler.ts | world, settings | 1. cycle_no を +1、cycle_seed を乱数で作る 2. listActiveAgents を種で並べ替え、活動量の割合だけ先頭から選ぶ 3. エージェントごとに、状態が running か・上限の中か・そのエージェントが active かを確かめ、max_concurrency の範囲で runOpportunity を呼ぶ 4. FreeTierExceededError なら enterLimitStopped('free_tier_error') 5. 各行動機会の後に isWithinLimits を確かめ、超えていれば enterLimitStopped | void | なし |
 | Scheduler.stopAll | scheduler/scheduler.ts | mode ('pause' または 'limit' または 'emergency') | 1. 新規の割り当てを止めるフラグを立てる 2. 再試行の待ちの signal を abort（shouldContinue が false を返す） 3. emergency なら実行中の AbortController も abort し、最大 5 秒待つ 4. 5 秒を過ぎた running を cancelled に更新 | 取り消した件数 (number) | なし |
