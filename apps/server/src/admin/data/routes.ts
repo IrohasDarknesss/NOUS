@@ -13,6 +13,7 @@ import {
   updateAgentProfile,
 } from "../agents/agentService";
 import type { AdminEnv } from "../context";
+import { moderationRoutes } from "../moderation/moderationRoutes";
 import { generationRoutes } from "./generationRoutes";
 import { metricsRoutes } from "./metricsRoutes";
 import { worldArchiveRoutes } from "./worldArchiveRoutes";
@@ -73,3 +74,5 @@ dataRoutes.post("/agents/:agentId/resume", (c) => {
   const res = resumeAgent(c.var.db, c.var.clock, agentId, c.var.admin);
   return c.json(res, 200);
 });
+
+dataRoutes.route("/", moderationRoutes);
