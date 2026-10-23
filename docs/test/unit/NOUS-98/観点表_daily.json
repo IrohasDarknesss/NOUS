@@ -1,0 +1,873 @@
+{
+  "title": "日次の処理 B02・B06・B07・B08（dayRollover・backup・startupRecovery・heartbeat）",
+  "ticket": "NOUS-98",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/scheduler/dayRollover.ts",
+    "apps/server/src/scheduler/backup.ts",
+    "apps/server/src/scheduler/startupRecovery.ts",
+    "apps/server/src/scheduler/heartbeat.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/scheduler/{dayRollover,backup,startupRecovery,heartbeat}.test.ts（実装時、NOUS-60）",
+    "apps/server/src/scheduler/{dayRollover,backup,startupRecovery,heartbeat}.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "DB（一時 DB）",
+    "時計（FakeClock）",
+    "ファイル（一時ディレクトリへの VACUUM INTO）",
+    "scheduler.wake（vi.fn）",
+    "logger（captureLogger）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 world 1章（起動のシーケンス）・4章（IPO）・5章（B01・B02・B06・B07・B08）・6章（例外・トランザクション）",
+    "基本設計書 概要 10章（バックアップ）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "dayRollover.rolloverDay：現在の世界がない",
+      "location": "dayRollover.ts:40"
+    },
+    {
+      "id": "B2",
+      "condition": "dayRollover.rolloverDay：世界が limit_stopped でない",
+      "location": "dayRollover.ts:46"
+    },
+    {
+      "id": "B3",
+      "condition": "dayRollover.rolloverDay：楽観の確認の UPDATE が 1 行以上（changes > 0）",
+      "location": "dayRollover.ts:61"
+    },
+    {
+      "id": "B4",
+      "condition": "dayRollover.rolloverDay：resumed なら wake",
+      "location": "dayRollover.ts:64"
+    },
+    {
+      "id": "B5",
+      "condition": "dayRollover.rolloverDay：runBackup の失敗（catch）",
+      "location": "dayRollover.ts:71"
+    },
+    {
+      "id": "B6",
+      "condition": "dayRollover.scheduleDayRollover：rolloverDay の例外（catch）",
+      "location": "dayRollover.ts:86"
+    },
+    {
+      "id": "B7",
+      "condition": "backup.runBackup：同じ名前のファイルがある",
+      "location": "backup.ts:48"
+    },
+    {
+      "id": "B8",
+      "condition": "backup.runBackup：名前が aisns-YYYYMMDD-HHMM.db の形",
+      "location": "backup.ts:54"
+    },
+    {
+      "id": "B9",
+      "condition": "backup.runBackup：8 件目以降の削除（ループ 0 回／1 回以上）",
+      "location": "backup.ts:57"
+    },
+    {
+      "id": "B10",
+      "condition": "backup.runBackup：logger がある",
+      "location": "backup.ts:61"
+    },
+    {
+      "id": "B11",
+      "condition": "backup.runBackup：失敗（catch → BackupError）",
+      "location": "backup.ts:63"
+    },
+    {
+      "id": "B12",
+      "condition": "startupRecovery.recoverOnStartup：現在の世界がある",
+      "location": "startupRecovery.ts:47"
+    },
+    {
+      "id": "B13",
+      "condition": "startupRecovery.recoverOnStartup：startupPatch が null でない（running）",
+      "location": "startupRecovery.ts:49"
+    },
+    {
+      "id": "B14",
+      "condition": "startupRecovery.recoverOnStartup：logger がある",
+      "location": "startupRecovery.ts:68"
+    },
+    {
+      "id": "B15",
+      "condition": "heartbeat.beat：現在の世界がない",
+      "location": "heartbeat.ts:35"
+    },
+    {
+      "id": "B16",
+      "condition": "heartbeat.beat：heartbeatPatch が null（running でない）",
+      "location": "heartbeat.ts:40"
+    },
+    {
+      "id": "B17",
+      "condition": "heartbeat.beat：UPDATE が 0 行",
+      "location": "heartbeat.ts:50"
+    },
+    {
+      "id": "B18",
+      "condition": "heartbeat.beat：running_since が変わった（スリープの補正）",
+      "location": "heartbeat.ts:55"
+    },
+    {
+      "id": "B19",
+      "condition": "heartbeat.beat：next_cycle_at があり now >= next_cycle_at",
+      "location": "heartbeat.ts:64"
+    },
+    {
+      "id": "B20",
+      "condition": "heartbeat.scheduleHeartbeat：beat の例外（catch）",
+      "location": "heartbeat.ts:79"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS60_DEV-01",
+      "target": "backupFileName",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "UTC の時刻から aisns-YYYYMMDD-HHMM.db を返す",
+      "precondition": "なし",
+      "input": "2026-10-22T00:00:00.000Z、2026-01-05T09:07:59.999Z",
+      "expected": "aisns-20261022-0000.db、aisns-20260105-0907.db",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-01 backupFileName は UTC の時刻から aisns-YYYYMMDD-HHMM.db の形式を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-02",
+      "target": "runBackup",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "バックアップのファイルが作られ、同じ分の再実行でも上書きできる",
+      "precondition": "一時 DB（createTestDb）、初回の世界",
+      "input": "存在しないサブディレクトリに 2 回",
+      "expected": "同じパス。複製に worlds の行がある",
+      "branches": [
+        "B7-T",
+        "B7-F",
+        "B10-F",
+        "B11-F"
+      ],
+      "mock": "一時 DB（createTestDb）、一時ディレクトリ",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-02 runBackup でバックアップファイルが作られ、同じ分の再実行でも上書きできる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-03",
+      "target": "runBackup",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "8 件以上あると古いものから消え、新しい 7 件だけが残る",
+      "precondition": "一時 DB（createTestDb）、README.txt を置く",
+      "input": "9 日分の runBackup",
+      "expected": "新しい 7 件と README.txt が残る",
+      "branches": [
+        "B8-T",
+        "B9-T"
+      ],
+      "mock": "一時 DB（createTestDb）、一時ディレクトリ",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-03 8 件以上あると古いものから消えて新しい 7 件だけが残る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-04",
+      "target": "runBackup",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "失敗したときは原因を cause に持つ BackupError を投げる",
+      "precondition": "DB を閉じる",
+      "input": "runBackup",
+      "expected": "BackupError、cause あり",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "一時 DB（createTestDb）",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-04 失敗したときは原因を cause に持つ BackupError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-05",
+      "target": "rolloverDay",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "00:00 UTC で daily_usage と現在の世界の daily_metrics の新しい日の行ができる",
+      "precondition": "一時 DB（createTestDb）、初回の世界",
+      "input": "rolloverDay(00:00)",
+      "expected": "daily_usage・daily_metrics の行ができる",
+      "branches": [
+        "B1-F",
+        "B5-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-05 00:00 UTC で daily_usage と現在の世界の daily_metrics の新しい日の行ができる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-06",
+      "target": "rolloverDay",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "同じ利用日で 2 回呼んでも重複せず、既存の値も壊さない",
+      "precondition": "一時 DB（createTestDb）、初回の世界",
+      "input": "rolloverDay を 2 回",
+      "expected": "行は 1 つで値はそのまま",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-06 同じ利用日で 2 回呼んでも重複せず既存の値も壊さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-07",
+      "target": "rolloverDay",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "limit_stopped の世界が running に戻り scheduler.wake が呼ばれる",
+      "precondition": "limit_stopped の世界",
+      "input": "rolloverDay(00:00)",
+      "expected": "running、stop_reason NULL、running_since・heartbeat_at が now、wake 1 回",
+      "branches": [
+        "B2-F",
+        "B3-T",
+        "B4-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-07 limit_stopped の世界が running に戻り scheduler.wake が呼ばれる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-08",
+      "target": "rolloverDay",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running・paused・emergency_stopped の世界は状態が変わらず wake も呼ばれない",
+      "precondition": "各状態の世界",
+      "input": "rolloverDay(00:00)",
+      "expected": "状態はそのまま、wake は呼ばれない",
+      "branches": [
+        "B2-T",
+        "B4-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-08 running・paused・emergency_stopped の世界は状態が変わらず wake も呼ばれない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-09",
+      "target": "rolloverDay",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "バックアップが失敗しても例外にならず backupPath が null になり、エラーが記録される",
+      "precondition": "バックアップの置き場をファイルにする",
+      "input": "rolloverDay(00:00)",
+      "expected": "backupPath null、daily_usage はできる、error が記録される",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn、captureLogger",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-09 バックアップが失敗しても例外にならず backupPath が null になりエラーが記録される",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-10",
+      "target": "scheduleDayRollover",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "FakeClock を 23:59 から 00:00 UTC を越えて進めると走り、翌日の 00:00 でも走る。解除の後は走らない",
+      "precondition": "limit_stopped の世界、時計 2026-10-21T23:59:00.000Z",
+      "input": "1 分進める → 24 時間進める → 解除 → 24 時間進める",
+      "expected": "2026-10-22・23 の行ができ、解除の後は増えない",
+      "branches": [
+        "B6-F"
+      ],
+      "mock": "FakeClock 2026-10-21T23:59:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-10 scheduleDayRollover で FakeClock を 23:59 から 00:00 UTC を越えて進めると rolloverDay が走り、翌日の 00:00 でも再び走る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-11",
+      "target": "recoverOnStartup",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running の generation_events が interrupted になり、他の状態は変わらない",
+      "precondition": "running・succeeded などの生成イベント",
+      "input": "recoverOnStartup(05:00)",
+      "expected": "running だけ interrupted",
+      "branches": [
+        "B14-T"
+      ],
+      "mock": "FakeClock 2026-10-22T05:00:00.000Z",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-11 running の generation_events が interrupted になり、他の状態は変わらない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-12",
+      "target": "recoverOnStartup",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running の世界の世界内時間が heartbeat_at までで補正され、running_since と heartbeat_at が now になる",
+      "precondition": "running の世界（elapsed 120、00:00 から 00:10 まで生存）",
+      "input": "recoverOnStartup(05:00)",
+      "expected": "world_elapsed_sec 720、running_since・heartbeat_at が 05:00",
+      "branches": [
+        "B12-T",
+        "B13-T"
+      ],
+      "mock": "FakeClock 2026-10-22T05:00:00.000Z",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-12 running の世界の世界内時間が heartbeat_at までで補正され、running_since と heartbeat_at が now になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-13",
+      "target": "recoverOnStartup",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "期限切れのセッションだけが削除される",
+      "precondition": "有効なセッションとアイドル期限切れのセッション",
+      "input": "recoverOnStartup(05:00)",
+      "expected": "deletedSessions 1、有効なものが残る",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T05:00:00.000Z",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-13 期限切れのセッションだけが削除される",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-14",
+      "target": "beat",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "世界が running でなければ何もしない",
+      "precondition": "preparing・paused の世界",
+      "input": "beat",
+      "expected": "updated・corrected・woke がすべて false、wake は呼ばれない",
+      "branches": [
+        "B15-F",
+        "B16-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-14 世界が running でなければ何もしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-15",
+      "target": "beat",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "前回の heartbeat_at から 180 秒以内なら heartbeat_at だけを更新する",
+      "precondition": "running の世界",
+      "input": "beat",
+      "expected": "heartbeat_at だけ now",
+      "branches": [
+        "B15-F",
+        "B16-F",
+        "B17-F",
+        "B18-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-15 前回の heartbeat_at から 180 秒以内なら heartbeat_at だけを更新する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-16",
+      "target": "beat",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "180 秒を超えて古ければ世界内時間を補正し、running_since を now にする",
+      "precondition": "running の世界",
+      "input": "beat",
+      "expected": "corrected true、world_elapsed_sec が補正される",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-16 前回の heartbeat_at から 180 秒を超えて古ければ世界内時間を補正し running_since を now にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-17",
+      "target": "beat",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "next_cycle_at を過ぎていれば scheduler.wake を呼ぶ",
+      "precondition": "running の世界、next_cycle_at を過去に",
+      "input": "beat",
+      "expected": "woke true、wake 1 回",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-17 next_cycle_at を過ぎていれば scheduler.wake を呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS60_DEV-18",
+      "target": "scheduleHeartbeat",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "FakeClock を 60 秒進めるごとに beat が走る",
+      "precondition": "running の世界",
+      "input": "60 秒ずつ進める",
+      "expected": "heartbeat_at が 60 秒ごとに更新される",
+      "branches": [
+        "B20-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "実装時のテスト（NOUS-60）",
+      "suspect": "",
+      "test_name": "TC-NOUS60_DEV-18 scheduleHeartbeat で FakeClock を 60 秒進めるごとに beat が走る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-024",
+      "target": "scheduleDayRollover",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "23:59:59.999 では走らず、00:00:00.000 UTC で走る",
+      "precondition": "一時 DB（createTestDb）、初回の世界、時計 2026-10-22T23:59:59.000Z",
+      "input": "23:59:59.999 まで進める → 00:00:00.000 まで進める",
+      "expected": "前は daily_usage なし、後は 2026-10-23 の行",
+      "branches": [
+        "B6-F"
+      ],
+      "mock": "FakeClock 2026-10-22T23:59:59.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "一部 TC-NOUS60_DEV-10（分の単位で越えるだけで、1 ミリ秒前の両側は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-024 scheduleDayRollover は 23:59:59.999 では走らず、00:00:00.000 UTC で走る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-025",
+      "target": "rolloverDay",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "利用日は now の UTC の日付になる",
+      "precondition": "一時 DB（createTestDb）、初回の世界",
+      "input": "now = 2026-10-22T23:59:59.999Z、2026-10-23T00:00:00.000Z",
+      "expected": "usage_date 2026-10-22、2026-10-23（daily_usage・daily_metrics とも）",
+      "branches": [
+        "B1-F"
+      ],
+      "mock": "FakeClock 2026-10-22T23:59:59.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "一部 TC-NOUS60_DEV-05（00:00 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-025 rolloverDay の利用日は now の UTC の日付になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-026",
+      "target": "rolloverDay",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "現在の世界がないときは daily_usage だけを作り、resumed は false で wake を呼ばない",
+      "precondition": "一時 DB（createTestDb）（世界なし）",
+      "input": "rolloverDay(2026-10-23T00:00:00.000Z)",
+      "expected": "resumed false、daily_usage 1 行、daily_metrics 0 行、wake は呼ばれない",
+      "branches": [
+        "B1-T",
+        "B4-F"
+      ],
+      "mock": "scheduler.wake を vi.fn",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-026 現在の世界がないときは daily_usage だけを作り、resumed は false で wake を呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-027",
+      "target": "rolloverDay",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "preparing の世界は状態を変えず、その世界の daily_metrics を作る",
+      "precondition": "一時 DB（createTestDb）、初回の世界（preparing）",
+      "input": "rolloverDay(2026-10-23T00:00:00.000Z)",
+      "expected": "resumed false、preparing のまま、daily_metrics 2026-10-23",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "scheduler.wake を vi.fn",
+      "dev_ref": "一部 TC-NOUS60_DEV-08（preparing は入っていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-027 preparing の世界は状態を変えず、その世界の daily_metrics を作る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-028",
+      "target": "scheduleDayRollover",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "日の区切りの処理が例外になってもタイマーは止まらず、翌日にも呼ばれて error を記録する",
+      "precondition": "DB を閉じる",
+      "input": "00:00 まで進める → 24 時間進める",
+      "expected": "error が 1 件 → 2 件。解除の後 pendingCount 0",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "FakeClock 2026-10-22T23:59:59.000Z、captureLogger",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-028 日の区切りの処理が例外になってもタイマーは止まらず、翌日の 00:00 UTC にも呼ばれて error を記録する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-029",
+      "target": "runBackup",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "バックアップがちょうど 7 件のときは 1 件も消さない",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "10/01〜10/07 の 7 回",
+      "expected": "7 件が残る（20261001〜20261007）",
+      "branches": [
+        "B8-T",
+        "B9-F"
+      ],
+      "mock": "一時 DB（createTestDb）、一時ディレクトリ",
+      "dev_ref": "一部 TC-NOUS60_DEV-03（9 件だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-029 バックアップがちょうど 7 件のときは 1 件も消さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-030",
+      "target": "runBackup",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "名前の形が違うファイルは世代に数えず、消さない",
+      "precondition": "一時 DB（createTestDb）、aisns-2026-10-01.db・aisns-20261001-000.db・aisns-20261001-0000.db.bak・other.db を置く",
+      "input": "10/01〜10/08 の 8 回",
+      "expected": "正しい形は 7 件（20261002 から）。形の違う 4 件は残る",
+      "branches": [
+        "B8-F",
+        "B9-T"
+      ],
+      "mock": "一時 DB（createTestDb）、一時ディレクトリ",
+      "dev_ref": "一部 TC-NOUS60_DEV-03（README.txt だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-030 名前の形が aisns-YYYYMMDD-HHMM.db でないファイルは世代に数えず、消さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-031",
+      "target": "backupFileName",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "UTC の分までで名前を作り、秒以下は切り捨てる",
+      "precondition": "なし",
+      "input": "2026-10-22T23:59:59.999Z、2026-12-31T23:59:00.000Z、2027-01-01T00:00:00.000Z",
+      "expected": "aisns-20261022-2359.db、aisns-20261231-2359.db、aisns-20270101-0000.db",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS60_DEV-01（日の区切りと年の変わり目は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-031 backupFileName は UTC の分までで名前を作り、秒以下は切り捨てる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-032",
+      "target": "runBackup",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "BackupError の name が BackupError で、メッセージに作ろうとしたファイル名を含む",
+      "precondition": "DB を閉じる",
+      "input": "runBackup(2026-10-22T00:00)",
+      "expected": "name BackupError、message に aisns-20261022-0000.db",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "一時 DB（createTestDb）",
+      "dev_ref": "一部 TC-NOUS60_DEV-04（cause だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-032 失敗したときの BackupError は name が BackupError で、メッセージに作ろうとしたファイル名を含む",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-033",
+      "target": "runBackup",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "logger を渡すと、作ったファイルのパスを info で記録する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "logger 付きで runBackup(2026-10-22T00:00)",
+      "expected": "戻り値のパス、info にファイル名",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb）、captureLogger",
+      "dev_ref": "なし（DEV は logger なし）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-033 logger を渡すと、作ったファイルのパスを info で記録する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-034",
+      "target": "recoverOnStartup",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "現在の世界がない（archived だけ）ときも、その世界の running の生成イベントを閉じ、worldPatched は false",
+      "precondition": "archived の世界と running の生成イベント 1 件",
+      "input": "recoverOnStartup(2026-10-23T05:00)、logger なし",
+      "expected": "closedEvents 1、worldPatched false。行は interrupted、finished_at 05:00",
+      "branches": [
+        "B12-F",
+        "B14-F"
+      ],
+      "mock": "FakeClock 2026-10-23T05:00:00.000Z",
+      "dev_ref": "なし（DEV-11 は現在の世界の行だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-034 現在の世界がない（archived だけ）ときも、その世界の running の生成イベントを interrupted で閉じ、worldPatched は false",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-035",
+      "target": "recoverOnStartup",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "paused の世界は世界内時間を補正しない",
+      "precondition": "paused の世界（elapsed 300）",
+      "input": "recoverOnStartup",
+      "expected": "worldPatched false、elapsed 300・running_since NULL のまま",
+      "branches": [
+        "B12-T",
+        "B13-F"
+      ],
+      "mock": "FakeClock 2026-10-23T05:00:00.000Z",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-035 paused の世界は世界内時間を補正しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-036",
+      "target": "recoverOnStartup",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "heartbeat_at が NULL の running の世界は running_since までで補正し（0 秒足す）、running_since と heartbeat_at を now にする",
+      "precondition": "running の世界（elapsed 120、running_since 00:00、heartbeat_at NULL）",
+      "input": "recoverOnStartup(05:00)",
+      "expected": "worldPatched true、elapsed 120、running_since・heartbeat_at 05:00",
+      "branches": [
+        "B12-T",
+        "B13-T"
+      ],
+      "mock": "FakeClock 2026-10-23T05:00:00.000Z",
+      "dev_ref": "一部 TC-NOUS60_DEV-12（heartbeat_at があるときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-036 heartbeat_at が NULL の running の世界は running_since までで補正し（足す秒は 0）、running_since と heartbeat_at を now にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-037",
+      "target": "recoverOnStartup",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "running の生成イベントも期限切れのセッションもないときは、どの件数も 0 を返す",
+      "precondition": "初回の世界（preparing）だけ",
+      "input": "recoverOnStartup",
+      "expected": "{ closedEvents 0, worldPatched false, deletedSessions 0 }",
+      "branches": [
+        "B12-T",
+        "B13-F"
+      ],
+      "mock": "FakeClock 2026-10-23T05:00:00.000Z",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-037 running の生成イベントも期限切れのセッションもないときは、どの件数も 0 を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-038",
+      "target": "beat",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "前回の heartbeat_at からの空白が 180 秒ちょうどなら補正せず、181 秒なら補正する",
+      "precondition": "running の世界（running_since・heartbeat_at 09:00）",
+      "input": "now = 09:03:00、09:03:01",
+      "expected": "180 秒は corrected false・running_since そのまま、181 秒は corrected true・running_since が now。heartbeat_at はどちらも now",
+      "branches": [
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "一部 TC-NOUS60_DEV-15・16（境目の両側は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-038 前回の heartbeat_at からの空白が 180 秒ちょうどなら補正せず、181 秒なら補正する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-039",
+      "target": "beat",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "next_cycle_at の 1 ミリ秒前では wake を呼ばず、ちょうどで呼ぶ",
+      "precondition": "running の世界、next_cycle_at 09:01:00.000",
+      "input": "now = 09:00:59.999、09:01:00.000",
+      "expected": "woke false・wake 0 回、woke true・wake 1 回",
+      "branches": [
+        "B19-T",
+        "B19-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "一部 TC-NOUS60_DEV-17（過ぎたときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-039 next_cycle_at の 1 ミリ秒前では wake を呼ばず、ちょうどで呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-040",
+      "target": "beat",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "next_cycle_at が NULL なら wake を呼ばない",
+      "precondition": "running の世界、next_cycle_at NULL",
+      "input": "now = 09:01:00",
+      "expected": "{ updated true, corrected false, woke false }",
+      "branches": [
+        "B19-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-040 next_cycle_at が NULL なら wake を呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-041",
+      "target": "beat",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "現在の世界がないときは何もしない",
+      "precondition": "一時 DB（createTestDb）（世界なし）",
+      "input": "beat(09:00)",
+      "expected": "すべて false、wake は呼ばれない",
+      "branches": [
+        "B15-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、scheduler.wake を vi.fn",
+      "dev_ref": "なし（DEV-14 は世界があって running でないとき）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-041 現在の世界がないときは何もしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-042",
+      "target": "scheduleHeartbeat",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "beat が例外になってもタイマーは止まらず、次の 60 秒でも呼ばれて error を記録する",
+      "precondition": "DB を閉じる",
+      "input": "60 秒進める → 60 秒進める",
+      "expected": "error が 1 件 → 2 件",
+      "branches": [
+        "B20-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、scheduler.wake を vi.fn、captureLogger",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-042 beat が例外になってもタイマーは止まらず、次の 60 秒でも呼ばれて error を記録する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-043",
+      "target": "scheduleHeartbeat",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "スリープからの復帰（FakeClock.jump で 10 分）で、最後の生存時刻までを世界内時間に足し、warn を記録する",
+      "precondition": "running の世界（elapsed 0、09:00 から）",
+      "input": "60 秒進める → jump 10 分",
+      "expected": "world_elapsed_sec 60、running_since・heartbeat_at 09:11:00、warn 1 件",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z（jump）、scheduler.wake を vi.fn、captureLogger",
+      "dev_ref": "一部 TC-NOUS60_DEV-16（beat を直接呼ぶだけで、タイマーと jump は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-043 スリープからの復帰（FakeClock.jump で 10 分）で、最後の生存時刻までを世界内時間に足し、warn を記録する",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "確認事項 1：B3-F（rolloverDay の楽観の確認で 0 行）と B17-T（beat の UPDATE が 0 行）は、同じ接続で同期に読んで書くため、単体テストでは起こせない。ケースを作っていない。",
+    "確認事項 2：B07 は設計書（world 4章 recoverOnStartup）で「closeOrphanEvents は全世界」としているので、archived の世界の running の行も閉じることを期待値にした（TC-UT_SCH-034）。",
+    "確認事項 3：00:00 UTC を求める onUtcMidnight は clock.ts（NOUS-96 の範囲）なので、ここでは scheduleDayRollover を通して 23:59:59.999 と 00:00:00.000 の両側だけを見る。"
+  ]
+}
