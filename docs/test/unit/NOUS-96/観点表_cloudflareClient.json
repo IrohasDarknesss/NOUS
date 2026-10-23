@@ -1,0 +1,1162 @@
+{
+  "title": "Cloudflare Workers AI の実装と LlmClient の選択（llm/cloudflareClient.ts・llm/createLlmClient.ts）",
+  "ticket": "NOUS-96",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/llm/cloudflareClient.ts",
+    "apps/server/src/llm/createLlmClient.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/llm/cloudflareClient.test.ts（実装時、NOUS-51。createLlmClient の DEV-41〜43 を含む）",
+    "apps/server/src/llm/cloudflareClient.ut.test.ts（単体テストで追加）",
+    "apps/server/src/llm/createLlmClient.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "fetch（Cloudflare Workers AI の REST。テストでは差し替え、実際の API は呼ばない）",
+    "時刻（nowMs。Clock の nowMs か Date.now）",
+    "AbortSignal（AbortSignal.timeout の 60 秒と緊急停止の signal を AbortSignal.any で合成）",
+    "環境変数 CLOUDFLARE_ACCOUNT_ID・CLOUDFLARE_API_TOKEN（lib/env.ts が読み、createLlmClient に渡す）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 generation 2章（外部連携 Cloudflare Workers AI・LlmClient.generate）・4章（callCloudflare・toLlmError・computeNeurons）・6章",
+    "基本設計書_概要 7章 IF-001"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "usesThinkingFlag：modelId が gemma-4 か glm を含む",
+      "location": "cloudflareClient.ts:51,74"
+    },
+    {
+      "id": "B2",
+      "condition": "usesNoThinkSuffix：modelId が qwen3 を含む",
+      "location": "cloudflareClient.ts:56,62"
+    },
+    {
+      "id": "B3",
+      "condition": "buildRequestBody：最後の user がある（target !== undefined）",
+      "location": "cloudflareClient.ts:65"
+    },
+    {
+      "id": "B4",
+      "condition": "errorsOf：本文がオブジェクトで errors が配列",
+      "location": "cloudflareClient.ts:88"
+    },
+    {
+      "id": "B5",
+      "condition": "errorsOf：要素が null でないオブジェクト",
+      "location": "cloudflareClient.ts:89"
+    },
+    {
+      "id": "B6",
+      "condition": "describeErrors：errors の要素が 1 件以上",
+      "location": "cloudflareClient.ts:97"
+    },
+    {
+      "id": "B7",
+      "condition": "toLlmError：status === 429",
+      "location": "cloudflareClient.ts:103"
+    },
+    {
+      "id": "B8",
+      "condition": "toLlmError：errors に code 3036 がある",
+      "location": "cloudflareClient.ts:104-107"
+    },
+    {
+      "id": "B9",
+      "condition": "computeNeurons：報告値が有限の数で 0 以上",
+      "location": "cloudflareClient.ts:120"
+    },
+    {
+      "id": "B10",
+      "condition": "computeNeurons：単価表にあるモデル（?? の左）",
+      "location": "cloudflareClient.ts:123"
+    },
+    {
+      "id": "B11",
+      "condition": "toCount：有限の数で 0 以上",
+      "location": "cloudflareClient.ts:136"
+    },
+    {
+      "id": "B12",
+      "condition": "toFetchError：依頼の signal が abort 済み",
+      "location": "cloudflareClient.ts:141"
+    },
+    {
+      "id": "B13",
+      "condition": "toFetchError：例外の名前が TimeoutError か AbortError",
+      "location": "cloudflareClient.ts:145"
+    },
+    {
+      "id": "B14",
+      "condition": "toFetchError：例外が Error のインスタンス",
+      "location": "cloudflareClient.ts:144,149"
+    },
+    {
+      "id": "B15",
+      "condition": "callCloudflare：options.fetch がある",
+      "location": "cloudflareClient.ts:155"
+    },
+    {
+      "id": "B16",
+      "condition": "callCloudflare：options.nowMs がない（Date.now を使う）",
+      "location": "cloudflareClient.ts:156"
+    },
+    {
+      "id": "B17",
+      "condition": "callCloudflare：呼ぶ前に signal が abort 済み",
+      "location": "cloudflareClient.ts:157"
+    },
+    {
+      "id": "B18",
+      "condition": "callCloudflare：fetch か response.text() が例外",
+      "location": "cloudflareClient.ts:165-178"
+    },
+    {
+      "id": "B19",
+      "condition": "callCloudflare：本文の JSON.parse が例外",
+      "location": "cloudflareClient.ts:181-185"
+    },
+    {
+      "id": "B20",
+      "condition": "callCloudflare：!response.ok",
+      "location": "cloudflareClient.ts:187"
+    },
+    {
+      "id": "B21",
+      "condition": "callCloudflare：本文が null、または success !== true",
+      "location": "cloudflareClient.ts:191"
+    },
+    {
+      "id": "B22",
+      "condition": "callCloudflare：choices[0].message.content が文字列でない",
+      "location": "cloudflareClient.ts:195"
+    },
+    {
+      "id": "B23",
+      "condition": "callCloudflare：usage.neurons が数値",
+      "location": "cloudflareClient.ts:213"
+    },
+    {
+      "id": "B24",
+      "condition": "callCloudflare：options.timeoutMs がある",
+      "location": "cloudflareClient.ts:162"
+    },
+    {
+      "id": "B25",
+      "condition": "createLlmClient：llmMode === \"cloudflare\"",
+      "location": "createLlmClient.ts:25"
+    },
+    {
+      "id": "B26",
+      "condition": "createLlmClient：env.cloudflare === null",
+      "location": "createLlmClient.ts:26"
+    },
+    {
+      "id": "B27",
+      "condition": "createLlmClient：fixtureScenario を省略（既定の basic）",
+      "location": "createLlmClient.ts:39"
+    }
+  ],
+  "issues": [
+    "確認事項 1：toLlmError は 400・401・429 以外の 4xx（403 の権限不足、404 のモデル名の誤り、413 の本文が大きすぎるなど）を ServerError として再試行の対象にしている。設計書（generation 2章）は 400・401 を「入力や権限の問題で再試行しない」としているが、ほかの 4xx は記載がない。403・404 も繰り返して直るものではないため、再試行しない側に入れるべきかを確認したい。単体テストは実装の値（再試行する）を期待値にした（TC-UT_LLM-037）。",
+    "確認事項 2：buildRequestBody は、Gemma 4・GLM・Qwen3 以外のモデルでは思考を止める指定を何も送らない（TC-UT_LLM-029）。world_settings.model_id は DB の CHECK で Gemma 4 と Qwen3 の 2 つに限られるため、今は影響がない。モデルを足すときに見直す。"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS51_DEV-01",
+      "target": "callCloudflare / CloudflareClient.generate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "URL・ヘッダー・本文を 2章どおりに送り、本文と usage を返す",
+      "precondition": "なし",
+      "input": "Gemma 4、system・user、maxTokens 300",
+      "expected": "POST、Bearer トークン、本文（messages・max_tokens・temperature 0.9・chat_template_kwargs）、LlmResult（usage の値と durationMs 965）",
+      "branches": [
+        "B1-T",
+        "B4-F",
+        "B9-T",
+        "B11-T",
+        "B15-T",
+        "B16-F",
+        "B17-F",
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B21-F",
+        "B22-F",
+        "B23-T",
+        "B24-F"
+      ],
+      "mock": "fetch → 200（success true、choices[0].message.content、usage）、nowMs の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-01 URL・ヘッダー・本文を 2章どおりに送り、本文と usage を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-02",
+      "target": "buildRequestBody",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "Qwen3 は user の末尾に ' /no_think' を付け、chat_template_kwargs を送らない",
+      "precondition": "なし",
+      "input": "Qwen3、system・user",
+      "expected": "user の末尾に /no_think。chat_template_kwargs なし",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-02 Qwen3 は user の末尾に ' /no_think' を付け、chat_template_kwargs を送らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-03",
+      "target": "buildRequestBody",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "buildRequestBody は元の messages を書き換えない",
+      "precondition": "なし",
+      "input": "Qwen3 の依頼",
+      "expected": "元の user の content は変わらない",
+      "branches": [
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-03 buildRequestBody は元の messages を書き換えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-04",
+      "target": "callCloudflare / computeNeurons",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "usage.neurons がなければ単価表から計算する",
+      "precondition": "なし",
+      "input": "usage { prompt_tokens 1000, completion_tokens 100 }",
+      "expected": "neurons = (1000×9091 + 100×27273) / 100 万",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B23-F"
+      ],
+      "mock": "fetch → 200（neurons なし）",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-04 usage.neurons がなければ単価表から計算する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-05",
+      "target": "computeNeurons",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "computeNeurons は Gemma 4・Qwen3 の単価を使い分け、報告値を優先する",
+      "precondition": "なし",
+      "input": "Gemma 4・Qwen3・表にないモデル、報告値 12.3",
+      "expected": "各単価の値、報告値 12.3、表にないモデルは高い方の単価",
+      "branches": [
+        "B9-T",
+        "B9-F",
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-05 computeNeurons は Gemma 4・Qwen3 の単価を使い分け、報告値を優先する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-06",
+      "target": "buildUrl",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "buildUrl は model_id の / をそのままパスに入れる",
+      "precondition": "なし",
+      "input": "アカウント ID、Qwen3",
+      "expected": ".../ai/run/@cf/qwen/qwen3-30b-a3b-fp8",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-06 buildUrl は model_id の / をそのままパスに入れる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-11",
+      "target": "toLlmError",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "429・3036 は FreeTierExceededError（再試行しない）",
+      "precondition": "なし",
+      "input": "429、errors [{ code 3036 }]",
+      "expected": "FreeTierExceededError、kind free_tier、retryable 偽、detail に 3036",
+      "branches": [
+        "B4-T",
+        "B5-F",
+        "B6-T",
+        "B7-T",
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-11 429・3036 は FreeTierExceededError（再試行しない）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-12",
+      "target": "toLlmError",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "3036 以外の 429 は RateLimitedError（3040・errors なし・JSON でない）",
+      "precondition": "なし",
+      "input": "429 と、3040・errors なし・null の本文",
+      "expected": "RateLimitedError、retryable 真",
+      "branches": [
+        "B4-T",
+        "B4-F",
+        "B6-F",
+        "B7-T",
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-12 3036 以外の 429 は RateLimitedError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-13",
+      "target": "toLlmError",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "HTTP 400・401・500・502・503 は ServerError（400・401 だけ再試行しない）",
+      "precondition": "なし",
+      "input": "400・401・500・502・503",
+      "expected": "ServerError、retryable は 400・401 だけ偽",
+      "branches": [
+        "B7-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-13 HTTP %i は ServerError（再試行 %s）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-14",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "200 でも success=false なら ServerError",
+      "precondition": "なし",
+      "input": "200、success false",
+      "expected": "ServerError、httpStatus 200",
+      "branches": [
+        "B20-F",
+        "B21-T",
+        "B7-F"
+      ],
+      "mock": "fetch → 200（success false）",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-14 200 でも success=false なら ServerError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-15",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "200 で本文が JSON でない、または choices がなければ ServerError",
+      "precondition": "なし",
+      "input": "200 \"<html>\"、200 choices []",
+      "expected": "どちらも ServerError",
+      "branches": [
+        "B19-T",
+        "B21-T",
+        "B21-F",
+        "B22-T"
+      ],
+      "mock": "fetch → 200（JSON でない・choices が空）",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-15 200 で本文が JSON でない、または choices がなければ ServerError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-16",
+      "target": "CloudflareClient.generate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "HTTP の 429・3036 を generate から FreeTierExceededError で投げる",
+      "precondition": "なし",
+      "input": "429、errors [{ code 3036 }]",
+      "expected": "FreeTierExceededError",
+      "branches": [
+        "B20-T",
+        "B7-T",
+        "B8-T"
+      ],
+      "mock": "fetch → 429",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-16 HTTP の 429・3036 を generate から FreeTierExceededError で投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-21",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "timeoutMs を超えたら TimeoutError",
+      "precondition": "なし",
+      "input": "timeoutMs 20",
+      "expected": "TimeoutError、retryable 真、httpStatus null",
+      "branches": [
+        "B12-F",
+        "B13-T",
+        "B18-T",
+        "B24-T"
+      ],
+      "mock": "fetch → signal の abort まで返らない",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-21 timeoutMs を超えたら TimeoutError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-22",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "呼び出し中に signal が abort されたら CancelledError",
+      "precondition": "なし",
+      "input": "呼び出し中に abort",
+      "expected": "CancelledError",
+      "branches": [
+        "B12-T",
+        "B18-T"
+      ],
+      "mock": "fetch → signal の abort まで返らない",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-22 呼び出し中に signal が abort されたら CancelledError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-23",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "呼ぶ前に abort 済みなら fetch を呼ばずに CancelledError",
+      "precondition": "なし",
+      "input": "abort 済みの signal",
+      "expected": "CancelledError。fetch は 0 回",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "fetch の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-23 呼ぶ前に abort 済みなら fetch を呼ばずに CancelledError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-24",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "接続の失敗は ServerError（httpStatus なし、再試行の対象）",
+      "precondition": "なし",
+      "input": "fetch が TypeError(\"fetch failed\")",
+      "expected": "ServerError、httpStatus null、retryable 真",
+      "branches": [
+        "B12-F",
+        "B13-F",
+        "B14-T",
+        "B18-T"
+      ],
+      "mock": "fetch → TypeError",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-24 接続の失敗は ServerError（httpStatus なし、再試行の対象）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-31",
+      "target": "CloudflareClient.generate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "失敗（429・3036、500、接続の失敗）のエラーにトークンが含まれない",
+      "precondition": "なし",
+      "input": "3 種の失敗",
+      "expected": "エラーの JSON・文字列・stack にトークンがない",
+      "branches": [
+        "B18-T",
+        "B20-T"
+      ],
+      "mock": "fetch → 429・500・TypeError",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-31 失敗（%s）のエラーにトークンが含まれない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-32",
+      "target": "CloudflareClient",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "クライアントを JSON にしても、列挙してもトークンが出ない",
+      "precondition": "なし",
+      "input": "createCloudflareClient",
+      "expected": "JSON.stringify・Object.values にトークンがない",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-32 クライアントを JSON にしても、列挙してもトークンが出ない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-41",
+      "target": "createLlmClient",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "AISNS_LLM_MODE=cloudflare なら CloudflareClient、fixed なら FixedClient",
+      "precondition": "なし",
+      "input": "llmMode cloudflare（設定あり）、fixed",
+      "expected": "CloudflareClient、FixedClient",
+      "branches": [
+        "B25-T",
+        "B25-F",
+        "B26-F",
+        "B27-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-41 AISNS_LLM_MODE=cloudflare なら CloudflareClient、fixed なら FixedClient",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-42",
+      "target": "createLlmClient",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "cloudflare で設定がなければ、トークンを含まないエラー",
+      "precondition": "なし",
+      "input": "llmMode cloudflare、cloudflare null",
+      "expected": "Error「Cloudflare の設定がありません」",
+      "branches": [
+        "B25-T",
+        "B26-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-42 cloudflare で設定がなければ、トークンを含まないエラー",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS51_DEV-43",
+      "target": "createLlmClient",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "差し替えた fetch が CloudflareClient に渡る",
+      "precondition": "なし",
+      "input": "llmMode cloudflare、fetch の差し替え",
+      "expected": "fetch が 1 回呼ばれる",
+      "branches": [
+        "B25-T",
+        "B26-F"
+      ],
+      "mock": "fetch → 200（success true、choices[0].message.content、usage）",
+      "dev_ref": "実装時のテスト（NOUS-51）",
+      "suspect": "",
+      "test_name": "TC-NOUS51_DEV-43 差し替えた fetch が CloudflareClient に渡る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-028",
+      "target": "buildRequestBody",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "GLM 系のモデルは chat_template_kwargs で思考を止め、' /no_think' は付けない",
+      "precondition": "なし",
+      "input": "modelId \"@cf/zai-org/glm-4.7-flash\"",
+      "expected": "chat_template_kwargs { enable_thinking: false }。user の content は変わらない",
+      "branches": [
+        "B1-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は Gemma 4 と Qwen3 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-028 GLM 系のモデルは chat_template_kwargs で思考を止め、' /no_think' は付けない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-029",
+      "target": "buildRequestBody",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "Gemma 4・GLM・Qwen3 以外のモデルは、どちらの思考の止め方もしない",
+      "precondition": "なし",
+      "input": "modelId \"@cf/meta/llama-3.1-8b-instruct\"",
+      "expected": "chat_template_kwargs なし。messages は元のまま。max_tokens・temperature 0.9 はある",
+      "branches": [
+        "B1-F",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-029 Gemma 4・GLM・Qwen3 以外のモデルは、どちらの思考の止め方もしない",
+      "result": "",
+      "note": "設計書（generation 2章）に、ほかのモデルの扱いの記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_LLM-030",
+      "target": "buildRequestBody",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "Qwen3 で user のメッセージがなければ、何も付けずに送る",
+      "precondition": "なし",
+      "input": "Qwen3、system だけ",
+      "expected": "messages は元のまま（例外にしない）",
+      "branches": [
+        "B2-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-030 Qwen3 で user のメッセージがなければ、何も付けずに送る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-031",
+      "target": "buildRequestBody",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "Qwen3 で user が 2 件あれば、最後の user だけに ' /no_think' を付ける",
+      "precondition": "なし",
+      "input": "Qwen3、user・system・user",
+      "expected": "最後の user だけ末尾に /no_think。1 件目の user は元のまま",
+      "branches": [
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-02 は user 1 件）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-031 Qwen3 で user が 2 件あれば、最後の user だけに ' /no_think' を付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-032",
+      "target": "buildUrl",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "アカウント ID はパスの区切りにならないよう符号化する",
+      "precondition": "なし",
+      "input": "accountId \"a/b?c\"、Gemma 4",
+      "expected": ".../accounts/a%2Fb%3Fc/ai/run/@cf/google/gemma-4-26b-a4b-it",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-06 は英数字のアカウント ID）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-032 アカウント ID はパスの区切りにならないよう符号化する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-033",
+      "target": "toLlmError",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "errors[].code が文字列の \"3036\" でも、429 なら無料枠の超過とみなす",
+      "precondition": "なし",
+      "input": "429、errors [{ code: \"3036\" }]",
+      "expected": "FreeTierExceededError",
+      "branches": [
+        "B7-T",
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-11 は数値の 3036）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-033 errors[].code が文字列の \"3036\" でも、429 なら無料枠の超過とみなす",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-034",
+      "target": "toLlmError",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "errors にオブジェクトでない要素が混ざっていても、オブジェクトの要素だけで判定し、detail に載せる",
+      "precondition": "なし",
+      "input": "429、errors [null, \"x\", 7, { code: 3036, message: \"limit\" }]",
+      "expected": "FreeTierExceededError、detail は \"http 429 3036:limit\"",
+      "branches": [
+        "B4-T",
+        "B5-T",
+        "B5-F",
+        "B6-T",
+        "B7-T",
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-034 errors にオブジェクトでない要素が混ざっていても、オブジェクトの要素だけで判定し、detail に載せる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-035",
+      "target": "toLlmError",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "detail は「http <状態> <code>:<message>」を「; 」でつなぎ、errors がなければ「http <状態>」だけ",
+      "precondition": "なし",
+      "input": "500、errors [{ code 1000, message \"a\" }, { code 1001, message \"b\" }]、500、本文 null",
+      "expected": "\"http 500 1000:a; 1001:b\"、\"http 500\"",
+      "branches": [
+        "B4-T",
+        "B4-F",
+        "B6-T",
+        "B6-F",
+        "B7-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS51_DEV-11（3036 を含むことだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-035 detail は「http <状態> <code>:<message>」を「; 」でつなぎ、errors がなければ「http <状態>」だけ",
+      "result": "",
+      "note": "書式は設計書に記載なし。実装の値（error_detail に残す内容）"
+    },
+    {
+      "id": "TC-UT_LLM-036",
+      "target": "toLlmError",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "429 以外で 3036 が返っても、無料枠の超過にはしない",
+      "precondition": "なし",
+      "input": "500、errors [{ code 3036 }]",
+      "expected": "ServerError（free_tier にしない）",
+      "branches": [
+        "B7-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-036 429 以外で 3036 が返っても、無料枠の超過にはしない",
+      "result": "",
+      "note": "設計書（generation 2章）は「429 かつ 3036」を free_tier とする"
+    },
+    {
+      "id": "TC-UT_LLM-037",
+      "target": "toLlmError",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "400・401 以外の 4xx（403・404・413）は ServerError で、再試行の対象になる",
+      "precondition": "なし",
+      "input": "403・404・413、errors [{ code 1000 }]",
+      "expected": "ServerError、retryable 真（実装の値）",
+      "branches": [
+        "B7-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-13 は 400・401・5xx だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-037 400・401 以外の 4xx（403・404・413）は ServerError で、再試行の対象になる",
+      "result": "",
+      "note": "設計書（generation 2章）は 400・401・429・5xx だけを定める。403 などの扱いは確認事項 1"
+    },
+    {
+      "id": "TC-UT_LLM-038",
+      "target": "computeNeurons",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "報告された neurons が 0 なら 0 を使い、単価表で計算しない",
+      "precondition": "なし",
+      "input": "Gemma 4、1000・100、報告値 0",
+      "expected": "0",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-05 は 12.3）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-038 報告された neurons が 0 なら 0 を使い、単価表で計算しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-039",
+      "target": "computeNeurons",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "報告された neurons が負・NaN・Infinity なら、単価表から計算する",
+      "precondition": "なし",
+      "input": "Gemma 4、1000000・0、報告値 -0.001・NaN・Infinity",
+      "expected": "どれも 9091",
+      "branches": [
+        "B9-F",
+        "B10-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-039 報告された neurons が負・NaN・Infinity なら、単価表から計算する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-040",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "2xx でない応答の本文が JSON でなくても ServerError にし、detail は「http <状態>」",
+      "precondition": "なし",
+      "input": "502、本文 \"<html>Bad Gateway</html>\"",
+      "expected": "ServerError、httpStatus 502、detail \"http 502\"、retryable 真",
+      "branches": [
+        "B19-T",
+        "B20-T",
+        "B4-F",
+        "B6-F",
+        "B7-F"
+      ],
+      "mock": "fetch → 502（HTML）",
+      "dev_ref": "なし（DEV-15 は 200 のとき）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-040 2xx でない応答の本文が JSON でなくても ServerError にし、detail は「http <状態>」",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-041",
+      "target": "callCloudflare",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "usage がなければトークンを 0 とし、neurons も 0 になる",
+      "precondition": "なし",
+      "input": "200、result に usage なし",
+      "expected": "promptTokens 0、completionTokens 0、neurons 0",
+      "branches": [
+        "B11-F",
+        "B23-F",
+        "B9-F"
+      ],
+      "mock": "fetch → 200（usage なし）",
+      "dev_ref": "なし（DEV-04 は neurons だけがない）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-041 usage がなければトークンを 0 とし、neurons も 0 になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-042",
+      "target": "callCloudflare",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "usage のトークンが負・文字列なら 0 として扱う",
+      "precondition": "なし",
+      "input": "prompt_tokens -5、completion_tokens \"72\"",
+      "expected": "promptTokens 0、completionTokens 0",
+      "branches": [
+        "B11-F"
+      ],
+      "mock": "fetch → 200（usage の値が不正）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-042 usage のトークンが負・文字列なら 0 として扱う",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-043",
+      "target": "callCloudflare",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "usage.neurons が文字列なら報告値として使わず、単価表から計算する",
+      "precondition": "なし",
+      "input": "usage { prompt_tokens 1000000, completion_tokens 0, neurons \"15.4\" }",
+      "expected": "neurons 9091",
+      "branches": [
+        "B23-F",
+        "B9-F"
+      ],
+      "mock": "fetch → 200（neurons が文字列）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-043 usage.neurons が文字列なら報告値として使わず、単価表から計算する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-044",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "choices[0].message.content が文字列でなければ ServerError",
+      "precondition": "なし",
+      "input": "200、content 123、content null",
+      "expected": "どちらも ServerError、httpStatus 200",
+      "branches": [
+        "B21-F",
+        "B22-T"
+      ],
+      "mock": "fetch → 200（content が文字列でない）",
+      "dev_ref": "一部 TC-NOUS51_DEV-15（choices が空のときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-044 choices[0].message.content が文字列でなければ ServerError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-045",
+      "target": "callCloudflare",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "時計が戻っても durationMs は負にならず 0 になる",
+      "precondition": "なし",
+      "input": "nowMs が 5000 → 4000 を返す",
+      "expected": "durationMs 0",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "fetch → 200（success true、choices[0].message.content、usage）、nowMs の差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-045 時計が戻っても durationMs は負にならず 0 になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-046",
+      "target": "callCloudflare",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "fetch を渡さなければ globalThis.fetch を、nowMs を渡さなければ Date.now を使う",
+      "precondition": "なし",
+      "input": "CloudflareClient（fetch・nowMs なし）",
+      "expected": "globalThis.fetch が 1 回呼ばれる。durationMs は Date.now の差",
+      "branches": [
+        "B15-F",
+        "B16-T"
+      ],
+      "mock": "globalThis.fetch（vi.stubGlobal）、Date.now（vi.spyOn）",
+      "dev_ref": "なし（DEV は fetch を必ず渡している）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-046 fetch を渡さなければ globalThis.fetch を、nowMs を渡さなければ Date.now を使う",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-047",
+      "target": "callCloudflare",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "timeoutMs を渡さなければ 60 秒で打ち切る",
+      "precondition": "なし",
+      "input": "CloudflareClient（timeoutMs なし）",
+      "expected": "AbortSignal.timeout が 60000 で呼ばれる",
+      "branches": [
+        "B24-F"
+      ],
+      "mock": "fetch → 200（success true、choices[0].message.content、usage）、AbortSignal.timeout（vi.spyOn）",
+      "dev_ref": "なし（DEV-21 は timeoutMs 20）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-047 timeoutMs を渡さなければ 60 秒で打ち切る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-048",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "本文の読み取り（response.text）が失敗したら ServerError（httpStatus なし）",
+      "precondition": "なし",
+      "input": "fetch は 200 を返すが text() が TypeError",
+      "expected": "ServerError、httpStatus null、retryable 真",
+      "branches": [
+        "B12-F",
+        "B13-F",
+        "B14-T",
+        "B18-T"
+      ],
+      "mock": "fetch → text() が例外の Response",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-048 本文の読み取り（response.text）が失敗したら ServerError（httpStatus なし）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-049",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "依頼の signal が abort されていないのに AbortError で失敗したら TimeoutError",
+      "precondition": "なし",
+      "input": "fetch が DOMException（AbortError）を投げる",
+      "expected": "TimeoutError",
+      "branches": [
+        "B12-F",
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "fetch → DOMException(\"aborted\", \"AbortError\")",
+      "dev_ref": "一部 TC-NOUS51_DEV-21（TimeoutError の名前のとき）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-049 依頼の signal が abort されていないのに AbortError で失敗したら TimeoutError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-050",
+      "target": "callCloudflare",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "fetch が Error 以外を投げたら ServerError にし、detail に値を文字列で残す",
+      "precondition": "なし",
+      "input": "fetch が \"boom\" を投げる",
+      "expected": "ServerError、detail \"fetch : boom\"、cause \"boom\"",
+      "branches": [
+        "B12-F",
+        "B13-F",
+        "B14-F",
+        "B18-T"
+      ],
+      "mock": "fetch → 文字列を throw",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-050 fetch が Error 以外を投げたら ServerError にし、detail に値を文字列で残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-051",
+      "target": "CloudflareClient.generate",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "401（認証の失敗）は再試行しない ServerError で、detail・message・stack にトークンが含まれない",
+      "precondition": "なし",
+      "input": "401、errors [{ code 10000, message \"Authentication error\" }]",
+      "expected": "ServerError、retryable 偽、detail \"http 401 10000:Authentication error\"。エラーの JSON・文字列・stack にトークンがない",
+      "branches": [
+        "B4-T",
+        "B6-T",
+        "B7-F",
+        "B20-T"
+      ],
+      "mock": "fetch → 401",
+      "dev_ref": "一部 TC-NOUS51_DEV-31（429・500・接続の失敗だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-051 401（認証の失敗）は再試行しない ServerError で、エラーにトークンが含まれない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-052",
+      "target": "createLlmClient",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "固定応答のシナリオの名前を指定すると、そのシナリオのファイルを読む",
+      "precondition": "mkdtemp の一時ディレクトリに s2/aoi-1.json を置く",
+      "input": "llmMode fixed、fixtureScenario \"s2\"",
+      "expected": "s2/aoi-1.json の text を返す",
+      "branches": [
+        "B25-F",
+        "B27-F"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "なし（DEV-41 は既定の basic）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-052 固定応答のシナリオの名前を指定すると、そのシナリオのファイルを読む",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-053",
+      "target": "createLlmClient",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "cloudflare のとき、durationMs は渡した時計の nowMs で測る",
+      "precondition": "FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "llmMode cloudflare、fetch の中で FakeClock を 1200 ms 進める",
+      "expected": "durationMs 1200",
+      "branches": [
+        "B25-T",
+        "B26-F"
+      ],
+      "mock": "fetch → 200（success true、choices[0].message.content、usage）、FakeClock",
+      "dev_ref": "なし（DEV-41・43 は時計を見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-053 cloudflare のとき、durationMs は渡した時計の nowMs で測る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-054",
+      "target": "createLlmClient",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "fixed のときは Cloudflare の設定があっても FixedClient を返す",
+      "precondition": "なし",
+      "input": "llmMode fixed、cloudflare { accountId, apiToken }",
+      "expected": "FixedClient",
+      "branches": [
+        "B25-F",
+        "B27-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-054 fixed のときは Cloudflare の設定があっても FixedClient を返す",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
