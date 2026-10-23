@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 |---|---|
 | 文書番号 | DD-NOUS-UT-00 |
-| 版数 | v1 |
+| 版数 | v1.1 |
 | 作成日 | 2026-10-23 |
 | 作成者 | Jane Doe（テスト担当） |
 | レビュー担当 | Kouhei Tajima（再鑑担当） |
@@ -15,6 +15,7 @@
 | 版数 | 日付 | 変更内容 | 変更者 |
 |---|---|---|---|
 | v1 | 2026-10-23 | 初版作成 | Jane Doe |
+| v1.1 | 2026-10-23 | 6.2 に SystemClock のテストだけ vi.useFakeTimers を使ってよいことを追記（NOUS-96 の確認事項） | Jane Doe |
 
 ---
 
@@ -157,7 +158,7 @@ python3 docs/test/unit/_build/build_matrix.py docs/test/unit/NOUS-xx/観点表_<
 - 開始時刻は、テストの中で固定の値を渡す（例：`new FakeClock(new Date("2026-10-22T09:00:00.000Z"))`）。`new FakeClock()` のように引数なしで作らない（実行した時刻になってしまうため）。
 - 時刻を進めるときは `await clock.advance(ms)` か `await clock.advanceTo(時刻)` を使う。スリープからの復帰（B08）を見るときは `await clock.jump(ms)` を使う。どれも `await` を忘れない。
 - 00:00 UTC の日の区切りは、23:59:59.999 と 00:00:00.000 の両側を境界値として入れる。
-- サーバーのコードには `vi.useFakeTimers()` を使わない（Clock を差し替える作りなので、二重になる）。画面（admin・observer）のコードで、ポーリングなどの `setTimeout`・`setInterval` を見るときだけ `vi.useFakeTimers()` を使い、`afterEach` で `vi.useRealTimers()` に戻す。
+- サーバーのコードには `vi.useFakeTimers()` を使わない（Clock を差し替える作りなので、二重になる）。ただし、Clock の実装そのもの（`clock/clock.ts` の SystemClock）のテストだけは、包んでいる `setTimeout`・`setInterval` を差し替えるために `vi.useFakeTimers()` を使ってよい（NOUS-96 で確認）。画面（admin・observer）のコードで、ポーリングなどの `setTimeout`・`setInterval` を見るときだけ `vi.useFakeTimers()` を使い、`afterEach` で `vi.useRealTimers()` に戻す。
 - 管理サーバーのテストは、`apps/server/test/helpers/adminTestSupport.ts` の `testDeps(db)`（FakeClock 付き、時刻は TEST_NOW）と `captureLogger()` を使ってよい。
 
 ### 6.3 LLM の固定応答（fixedClient）
