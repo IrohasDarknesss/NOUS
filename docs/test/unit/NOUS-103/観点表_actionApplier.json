@@ -1,0 +1,554 @@
+{
+  "title": "行動の反映（generation/actionApplier.ts）",
+  "ticket": "NOUS-103",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/generation/actionApplier.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/generation/actionApplier.test.ts（実装時、NOUS-62）",
+    "apps/server/src/generation/actionApplier.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "一時 DB（createTestDb）。前提のデータは generationSeed（seedWorld・seedAgent・seedEvent）",
+    "時刻は引数の nowIso・usageDate（2026-10-22T09:00:00.000Z・2026-10-22）で固定。Clock は使わない",
+    "ID は newUlid（値そのものは確かめない）"
+  ],
+  "design_refs": [
+    "行動生成とプロンプトの設計 7章",
+    "BE 詳細設計 generation 3章（insertPost・insertLike・insertFollow／endFollow）・4章 applyAction・6章 DuplicateActionError"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "reply：返信先の投稿がない（target === undefined）",
+      "location": "actionApplier.ts:139"
+    },
+    {
+      "id": "B2",
+      "condition": "reply：返信先が別の世界（target.world_id !== ctx.worldId）",
+      "location": "actionApplier.ts:139"
+    },
+    {
+      "id": "B3",
+      "condition": "countRepliedPost：返信先の作成日の日付が usageDate と違う",
+      "location": "actionApplier.ts:78"
+    },
+    {
+      "id": "B4",
+      "condition": "countRepliedPost：返信先への返信がすでにある",
+      "location": "actionApplier.ts:86"
+    },
+    {
+      "id": "B5",
+      "condition": "guardUnique：例外が UNIQUE・PRIMARY KEY の違反（DuplicateActionError にする）",
+      "location": "actionApplier.ts:56・68"
+    },
+    {
+      "id": "B6",
+      "condition": "uniqueViolation：message から制約の名前を取れない（?? String(code)）",
+      "location": "actionApplier.ts:61"
+    },
+    {
+      "id": "B7",
+      "condition": "unfollow：更新した継続中のフォローがない",
+      "location": "actionApplier.ts:225"
+    },
+    {
+      "id": "B8",
+      "condition": "switch：none",
+      "location": "actionApplier.ts:102"
+    },
+    {
+      "id": "B9",
+      "condition": "switch：post",
+      "location": "actionApplier.ts:105"
+    },
+    {
+      "id": "B10",
+      "condition": "switch：reply",
+      "location": "actionApplier.ts:127"
+    },
+    {
+      "id": "B11",
+      "condition": "switch：like",
+      "location": "actionApplier.ts:174"
+    },
+    {
+      "id": "B12",
+      "condition": "switch：follow",
+      "location": "actionApplier.ts:193"
+    },
+    {
+      "id": "B13",
+      "condition": "switch：unfollow",
+      "location": "actionApplier.ts:211"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS62_DEV-21",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "post は reply_to=NULL・root=自分・depth=0 で 1 行入れる",
+      "precondition": "世界・minato・haruka",
+      "input": "post「朝の港です」、世界内時間 100",
+      "expected": "posts に 1 行（reply_to=NULL、root=自分、depth=0、public）",
+      "branches": [
+        "B9-T",
+        "B8-F",
+        "B10-F",
+        "B11-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-21 post は reply_to=NULL・root=自分・depth=0 で 1 行入れる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-22",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "reply は対象の root と depth＋1 で入れ、今日の初めての返信なら replied_posts を加算する",
+      "precondition": "minato の投稿（今日）",
+      "input": "haruka が起点に返信、minato がその返信に返信、haruka が起点に 2 回目の返信",
+      "expected": "root と depth＋1。replied_posts は 2（2 回目の返信は数えない）",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F",
+        "B4-F",
+        "B4-T",
+        "B10-T",
+        "B8-F",
+        "B9-F",
+        "B11-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-22 reply は対象の root と depth＋1 で入れ、今日の初めての返信なら replied_posts を加算する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-23",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "前の日の投稿への返信は replied_posts に数えない",
+      "precondition": "起点の created_at を 2026-10-21T09:00 に",
+      "input": "haruka が起点に返信",
+      "expected": "firstReplyToday=false、daily_metrics は 0 行",
+      "branches": [
+        "B3-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-23 前の日の投稿への返信は replied_posts に数えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-24",
+      "target": "applyAction",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "like を入れ、同じ投稿への 2 回目は DuplicateActionError",
+      "precondition": "minato の投稿",
+      "input": "haruka が同じ投稿に 2 回いいね",
+      "expected": "1 回目は入り、2 回目は DuplicateActionError、likes は 1 行のまま",
+      "branches": [
+        "B5-T",
+        "B11-T",
+        "B8-F",
+        "B9-F",
+        "B10-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-24 like を入れ、同じ投稿への 2 回目は DuplicateActionError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-25",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "follow → unfollow で開始と解除の時刻・イベントが残る",
+      "precondition": "世界・minato・haruka",
+      "input": "follow（100）→ unfollow（200）",
+      "expected": "follows の開始・解除の時刻とイベントが残る",
+      "branches": [
+        "B7-F",
+        "B12-T",
+        "B13-T",
+        "B8-F",
+        "B9-F",
+        "B10-F",
+        "B11-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-25 follow → unfollow で開始と解除の時刻・イベントが残る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-26",
+      "target": "applyAction",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "継続中のフォローの 2 重は DuplicateActionError、フォローのない解除も DuplicateActionError",
+      "precondition": "minato が haruka をフォロー中",
+      "input": "同じ follow をもう一度、haruka から minato の unfollow",
+      "expected": "どちらも DuplicateActionError",
+      "branches": [
+        "B5-T",
+        "B7-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-26 継続中のフォローの 2 重は DuplicateActionError、フォローのない解除も DuplicateActionError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-27",
+      "target": "applyAction",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "同じ生成イベントでの 2 回目の投稿は DuplicateActionError（generation_event_id の UNIQUE）",
+      "precondition": "同じ生成イベント",
+      "input": "post を 2 回",
+      "expected": "2 回目は DuplicateActionError、errorDetail に generation_event_id",
+      "branches": [
+        "B5-T",
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-27 同じ生成イベントでの 2 回目の投稿は DuplicateActionError（generation_event_id の UNIQUE）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-28",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "none は何も入れない",
+      "precondition": "世界・minato",
+      "input": "none",
+      "expected": "{ action: none }、posts・likes・follows は 0 行",
+      "branches": [
+        "B8-T",
+        "B9-F",
+        "B10-F",
+        "B11-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-28 none は何も入れない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-001",
+      "target": "applyAction",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "返信先の投稿がなければ、DuplicateActionError でないエラーで止め、何も入れない",
+      "precondition": "世界・minato・haruka",
+      "input": "reply、targetPostId = 存在しない ID",
+      "expected": "Error「返信先の投稿が同じ世界にありません」（DuplicateActionError ではない）。posts は 0 行",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_APL-001 返信先の投稿がなければ、DuplicateActionError でないエラーで止め、何も入れない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-002",
+      "target": "applyAction",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "返信先が別の世界の投稿なら、DuplicateActionError でないエラーで止め、何も入れない",
+      "precondition": "アーカイブ済みの世界に stranger の投稿",
+      "input": "minato が今の世界から、その投稿に reply",
+      "expected": "Error「返信先の投稿が同じ世界にありません」（DuplicateActionError ではない）。minato の posts は 0 行",
+      "branches": [
+        "B1-F",
+        "B2-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる。アーカイブ済みの世界はテストの中で insert する（ux_worlds_current のため）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_APL-002 返信先が別の世界の投稿なら、DuplicateActionError でないエラーで止め、何も入れない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-003",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "daily_metrics に今日の行があれば、replied_posts だけを 1 増やし、他の列は変えない",
+      "precondition": "daily_metrics（今日）に runs 7・posts 5・replies 3・replied_posts 2・nones 1 の行、haruka の投稿（今日）",
+      "input": "minato が返信",
+      "expected": "replied_posts だけ 3 になり、他の列は変わらない",
+      "branches": [
+        "B3-F",
+        "B4-F",
+        "B10-T",
+        "B8-F",
+        "B9-F",
+        "B11-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-22（行がないところから作る場合だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-003 daily_metrics に今日の行があれば、replied_posts だけを 1 増やし、他の列は変えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-004",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "自分の投稿への返信も、今日の初めての返信なら replied_posts に数える",
+      "precondition": "minato の投稿（今日）",
+      "input": "minato が自分の投稿に返信",
+      "expected": "depth=1、firstReplyToday=true、replied_posts=1",
+      "branches": [
+        "B3-F",
+        "B4-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし（DEV は他の住人の投稿への返信だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-004 自分の投稿への返信も、今日の初めての返信なら replied_posts に数える",
+      "result": "",
+      "note": "7章は「対象が今日の投稿で返信が初めてなら」で、返信した人を問わない"
+    },
+    {
+      "id": "TC-UT_APL-005",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "返信先の作成日時がその日の 00:00:00.000 なら今日の投稿として数える",
+      "precondition": "haruka の投稿の created_at を 2026-10-22T00:00:00.000Z に",
+      "input": "minato が返信（usageDate 2026-10-22）",
+      "expected": "firstReplyToday=true、replied_posts=1",
+      "branches": [
+        "B3-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし（DEV は 09:00 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-005 返信先の作成日時がその日の 00:00:00.000 なら今日の投稿として数える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-006",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "返信先の作成日時が前の日の 23:59:59.999 なら数えない",
+      "precondition": "haruka の投稿の created_at を 2026-10-21T23:59:59.999Z に",
+      "input": "minato が返信（usageDate 2026-10-22）",
+      "expected": "firstReplyToday=false、daily_metrics は 0 行",
+      "branches": [
+        "B3-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-23（前の日の 09:00）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-006 返信先の作成日時が前の日の 23:59:59.999 なら数えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-007",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "解除の後にフォローし直すと、新しい行として入り、継続中は 1 行だけ",
+      "precondition": "minato が haruka を follow（100）→ unfollow（200）",
+      "input": "もう一度 follow（300）",
+      "expected": "follows は 2 行、継続中は世界内時間 300・今回のイベントの 1 行だけ",
+      "branches": [
+        "B12-T",
+        "B8-F",
+        "B9-F",
+        "B10-F",
+        "B11-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし（DEV は 1 回のフォローと解除まで）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-007 解除の後にフォローし直すと、新しい行として入り、継続中は 1 行だけ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-008",
+      "target": "applyAction",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "解除済みのフォローしかない相手の解除は DuplicateActionError（unfollow_without_follow）",
+      "precondition": "minato が haruka を follow（100）→ unfollow（200）",
+      "input": "もう一度 unfollow（300）",
+      "expected": "DuplicateActionError、constraint=unfollow_without_follow、errorDetail=duplicate_action unfollow_without_follow。解除の行は 200 のまま",
+      "branches": [
+        "B7-T",
+        "B13-T",
+        "B8-F",
+        "B9-F",
+        "B10-F",
+        "B11-F",
+        "B12-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-26（フォローしたことのない相手、型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-008 解除済みのフォローしかない相手の解除は DuplicateActionError（unfollow_without_follow）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-009",
+      "target": "applyAction",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "UNIQUE 以外の制約の違反（自分へのフォロー）は DuplicateActionError にせず、そのまま投げ直す",
+      "precondition": "世界・minato",
+      "input": "minato が minato を follow（follows の CHECK follower_id <> followee_id に違反）",
+      "expected": "例外を投げ、DuplicateActionError ではない。follows は 0 行",
+      "branches": [
+        "B5-F",
+        "B12-T",
+        "B8-F",
+        "B9-F",
+        "B10-F",
+        "B11-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_APL-009 UNIQUE 以外の制約の違反（自分へのフォロー）は DuplicateActionError にせず、そのまま投げ直す",
+      "result": "",
+      "note": "検証（validateAction）の後には起きない組み合わせを、guardUnique の投げ直しを確かめるために直接入れる"
+    },
+    {
+      "id": "TC-UT_APL-010",
+      "target": "applyAction",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "いいねの 2 重の errorDetail に、違反した likes の列の名前が入る",
+      "precondition": "haruka が minato の投稿にいいね済み",
+      "input": "haruka が同じ投稿にいいね",
+      "expected": "DuplicateActionError、errorDetail が duplicate_action で始まり likes.agent_id と likes.post_id を含む",
+      "branches": [
+        "B5-T",
+        "B6-F",
+        "B11-T",
+        "B8-F",
+        "B9-F",
+        "B10-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-24（型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-010 いいねの 2 重の errorDetail に、違反した likes の列の名前が入る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-011",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "like は世界内時間・生成イベント・作成日時を残し、戻り値の ID と行が一致する",
+      "precondition": "minato の投稿",
+      "input": "haruka が like、世界内時間 150",
+      "expected": "戻り値の likeId が行と一致。world_id・world_time_sec=150・created_at・generation_event_id が入る",
+      "branches": [
+        "B11-T",
+        "B8-F",
+        "B9-F",
+        "B10-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-24（件数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-011 like は世界内時間・生成イベント・作成日時を残し、戻り値の ID と行が一致する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_APL-012",
+      "target": "applyAction",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "follow は開始の世界内時間と生成イベントを残し、解除の列は空のまま",
+      "precondition": "世界・minato・haruka",
+      "input": "minato が haruka を follow、世界内時間 160",
+      "expected": "戻り値の followId が行と一致。started_world_sec=160・start_event_id、ended_world_sec と end_event_id は NULL",
+      "branches": [
+        "B12-T",
+        "B8-F",
+        "B9-F",
+        "B10-F",
+        "B11-F",
+        "B13-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-25（解除の後の行だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_APL-012 follow は開始の世界内時間と生成イベントを残し、解除の列は空のまま",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "確認事項 1：B6-T（制約の名前を message から取れない場合）は、better-sqlite3 の UNIQUE の違反の message がいつも「UNIQUE constraint failed: …」になるため、DB を使うテストでは通せない。uniqueViolation は公開されていないので、単体テストでは扱わない。",
+    "確認事項 2：B8〜B13 は switch の振り分けで、偽はほかの case を通るケースで当たる（分岐の列に補っている）。",
+    "確認事項 3：7章の none の反映（daily_metrics.nones の加算）と、replied_posts 以外の加算は、commitAction（opportunityRunner、NOUS-104 の対象）で行う。applyAction の単体テストでは見ない。"
+  ]
+}

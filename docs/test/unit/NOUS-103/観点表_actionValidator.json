@@ -1,0 +1,773 @@
+{
+  "title": "意味の検証と本文の切り詰め（generation/actionValidator.ts）",
+  "ticket": "NOUS-103",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/generation/actionValidator.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/generation/actionValidator.test.ts（実装時、NOUS-62）",
+    "apps/server/src/generation/actionValidator.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "なし（引数の ValidationContext だけを見る純粋関数）"
+  ],
+  "design_refs": [
+    "行動生成とプロンプトの設計 6.3",
+    "BE 詳細設計 generation 4章 validateAction・truncateText"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "action が none でなく、candidates に含まれない",
+      "location": "actionValidator.ts:108"
+    },
+    {
+      "id": "B2",
+      "condition": "findRef：refs に P 番号がない",
+      "location": "actionValidator.ts:86"
+    },
+    {
+      "id": "B3",
+      "condition": "like：対象の投稿が自分のもの（ref.agentId === context.agentId）",
+      "location": "actionValidator.ts:124"
+    },
+    {
+      "id": "B4",
+      "condition": "like：likeablePostIds に含まれない",
+      "location": "actionValidator.ts:127"
+    },
+    {
+      "id": "B5",
+      "condition": "findAgent：一覧にハンドルがない",
+      "location": "actionValidator.ts:95"
+    },
+    {
+      "id": "B6",
+      "condition": "follow：相手が自分（target.agentId === context.agentId）",
+      "location": "actionValidator.ts:135"
+    },
+    {
+      "id": "B7",
+      "condition": "truncateText：前後の空白を除くと空",
+      "location": "actionValidator.ts:62"
+    },
+    {
+      "id": "B8",
+      "condition": "truncateText：140 字以内",
+      "location": "actionValidator.ts:66"
+    },
+    {
+      "id": "B9",
+      "condition": "truncateText：140 字以内に「。！？」がある（cut >= 0）",
+      "location": "actionValidator.ts:71-77"
+    },
+    {
+      "id": "B10",
+      "condition": "truncateText：切った結果が 20 字未満",
+      "location": "actionValidator.ts:78"
+    },
+    {
+      "id": "B11",
+      "condition": "switch：none",
+      "location": "actionValidator.ts:112"
+    },
+    {
+      "id": "B12",
+      "condition": "switch：post",
+      "location": "actionValidator.ts:114"
+    },
+    {
+      "id": "B13",
+      "condition": "switch：reply",
+      "location": "actionValidator.ts:116"
+    },
+    {
+      "id": "B14",
+      "condition": "switch：like",
+      "location": "actionValidator.ts:121"
+    },
+    {
+      "id": "B15",
+      "condition": "switch：follow",
+      "location": "actionValidator.ts:132"
+    },
+    {
+      "id": "B16",
+      "condition": "switch：unfollow",
+      "location": "actionValidator.ts:140"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS62_DEV-11",
+      "target": "validateAction",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "合格した行動を P 番号・ハンドルから ID にする",
+      "precondition": "文脈：P1（haruka）・P2（自分）・P3（zen）、いいねできるのは POST_1、フォローできるのは zen、フォロー中は haruka",
+      "input": "reply P1・like P1・follow @zen・unfollow @haruka・post",
+      "expected": "P 番号・ハンドルを投稿 ID・エージェント ID にした ValidAction",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F",
+        "B4-F",
+        "B5-F",
+        "B6-F",
+        "B7-F",
+        "B8-T",
+        "B12-T",
+        "B13-T",
+        "B14-T",
+        "B15-T",
+        "B16-T",
+        "B11-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-11 合格した行動を P 番号・ハンドルから ID にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-12",
+      "target": "validateAction",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "none は候補になくてもいつも選べる",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "none、候補は post・reply",
+      "expected": "{ action: none }",
+      "branches": [
+        "B1-F",
+        "B11-T",
+        "B12-F",
+        "B13-F",
+        "B14-F",
+        "B15-F",
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-12 none は候補になくてもいつも選べる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-13",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "各入力 は InvalidFormatError",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "候補外・存在しない P 番号・自分の投稿へのいいねなど 9 種",
+      "expected": "InvalidFormatError",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B3-T",
+        "B4-T",
+        "B5-T",
+        "B7-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-13 %s は InvalidFormatError",
+      "result": "",
+      "note": "detail は UT_VAL-001〜011 で 1 件ずつ確かめる"
+    },
+    {
+      "id": "TC-NOUS62_DEV-14",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "自分を相手にしたフォローは、followTargets に自分が混ざっていても拒否する",
+      "precondition": "followTargets に自分（minato）が混ざっている",
+      "input": "follow @minato",
+      "expected": "InvalidFormatError",
+      "branches": [
+        "B5-F",
+        "B6-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-14 自分を相手にしたフォローは、followTargets に自分が混ざっていても拒否する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-15",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "140 字ちょうどはそのまま",
+      "precondition": "なし",
+      "input": "あ×140",
+      "expected": "そのまま",
+      "branches": [
+        "B7-F",
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-15 140 字ちょうどはそのまま",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-16",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "141 字以上は 140 字以内の最後の「。！？」で切る",
+      "precondition": "なし",
+      "input": "あ×50。い×60！う×40（152 字）",
+      "expected": "あ×50。い×60！",
+      "branches": [
+        "B8-F",
+        "B9-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-16 141 字以上は 140 字以内の最後の「。！？」で切る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-17",
+      "target": "truncateText",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "切った結果が 20 字未満なら InvalidFormatError",
+      "precondition": "なし",
+      "input": "あ×10。い×140",
+      "expected": "InvalidFormatError",
+      "branches": [
+        "B9-T",
+        "B10-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-17 切った結果が 20 字未満なら InvalidFormatError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-18",
+      "target": "truncateText",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "140 字以内に句点がなければ InvalidFormatError",
+      "precondition": "なし",
+      "input": "あ×141",
+      "expected": "InvalidFormatError",
+      "branches": [
+        "B9-F",
+        "B10-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-18 140 字以内に句点がなければ InvalidFormatError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-19",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "字数はコードポイントで数える（絵文字 1 つを 1 字）",
+      "precondition": "なし",
+      "input": "😀×140",
+      "expected": "そのまま（コードポイントで 140 字）",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-19 字数はコードポイントで数える（絵文字 1 つを 1 字）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-001",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "候補にない post は not_candidate:post",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "post、候補は like だけ",
+      "expected": "InvalidFormatError、kind=invalid_format、detail=not_candidate:post",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-13（like の候補外を、型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-001 候補にない post は not_candidate:post",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-002",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "候補にない reply は、P 番号が正しくても not_candidate:reply",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "reply P1、候補は post・like",
+      "expected": "detail=not_candidate:reply（P 番号が正しくても候補外を先に見る）",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-002 候補にない reply は、P 番号が正しくても not_candidate:reply",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-003",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "参照する投稿にない P 番号は unknown_ref",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "reply P9",
+      "expected": "detail=unknown_ref:P9",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B13-T",
+        "B11-F",
+        "B12-F",
+        "B14-F",
+        "B15-F",
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-13（型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-003 参照する投稿にない P 番号は unknown_ref",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-004",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "自分の投稿へのいいねは like_own_post",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "like P2",
+      "expected": "detail=like_own_post:P2",
+      "branches": [
+        "B2-F",
+        "B3-T",
+        "B14-T",
+        "B11-F",
+        "B12-F",
+        "B13-F",
+        "B15-F",
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-13（型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-004 自分の投稿へのいいねは like_own_post",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-005",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "いいね済みの投稿へのいいねは already_liked",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "like P3",
+      "expected": "detail=already_liked:P3",
+      "branches": [
+        "B3-F",
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-13（型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-005 いいね済みの投稿へのいいねは already_liked",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-006",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "フォローできる住人にない相手のフォローは not_followable",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "follow @haruka",
+      "expected": "detail=not_followable:@haruka",
+      "branches": [
+        "B5-T",
+        "B15-T",
+        "B11-F",
+        "B12-F",
+        "B13-F",
+        "B14-F",
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-13（型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-006 フォローできる住人にない相手のフォローは not_followable",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-007",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "フォロー中でない相手の解除は not_following",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "unfollow @zen",
+      "expected": "detail=not_following:@zen",
+      "branches": [
+        "B5-T",
+        "B16-T",
+        "B11-F",
+        "B12-F",
+        "B13-F",
+        "B14-F",
+        "B15-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-13（型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-007 フォロー中でない相手の解除は not_following",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-008",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "自分へのフォローは follow_self",
+      "precondition": "followTargets に自分（minato）だけ",
+      "input": "follow @minato",
+      "expected": "detail=follow_self:@minato",
+      "branches": [
+        "B5-F",
+        "B6-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-14（型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-008 自分へのフォローは follow_self",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-009",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "参照する投稿が 0 件の文脈での reply は unknown_ref",
+      "precondition": "refs と likeablePostIds が空",
+      "input": "reply P1",
+      "expected": "detail=unknown_ref:P1",
+      "branches": [
+        "B2-T",
+        "B13-T",
+        "B11-F",
+        "B12-F",
+        "B14-F",
+        "B15-F",
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-009 参照する投稿が 0 件の文脈での reply は unknown_ref",
+      "result": "",
+      "note": "NOUS-102 の TC-UT_PRM-031（参照する投稿をすべて外しても候補に reply・like が残る）のときの動き"
+    },
+    {
+      "id": "TC-UT_VAL-021",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "参照する投稿が 0 件の文脈での like も unknown_ref",
+      "precondition": "refs と likeablePostIds が空",
+      "input": "like P1",
+      "expected": "detail=unknown_ref:P1",
+      "branches": [
+        "B2-T",
+        "B14-T",
+        "B11-F",
+        "B12-F",
+        "B13-F",
+        "B15-F",
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-021 参照する投稿が 0 件の文脈での like も unknown_ref",
+      "result": "",
+      "note": "TC-UT_VAL-009 と同じく、NOUS-102 の TC-UT_PRM-031 のときの動き。再生成になり、2 回目も選べば invalid_format で閉じる（試行が無駄になる）"
+    },
+    {
+      "id": "TC-UT_VAL-010",
+      "target": "validateAction",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "reply の本文も 140 字を超えれば、140 字以内の最後の句点で切る",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "reply P1、text = あ×100。い×60（161 字）",
+      "expected": "text = あ×100。（101 字）、targetPostId = POST_1",
+      "branches": [
+        "B8-F",
+        "B9-T",
+        "B10-F",
+        "B13-T",
+        "B11-F",
+        "B12-F",
+        "B14-F",
+        "B15-F",
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV の切り詰めは truncateText を直に呼ぶだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-010 reply の本文も 140 字を超えれば、140 字以内の最後の句点で切る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-011",
+      "target": "validateAction",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "reply の本文が空白だけなら text_blank",
+      "precondition": "DEV-11 と同じ文脈",
+      "input": "reply P1、text = \" \\n \"",
+      "expected": "detail=text_blank",
+      "branches": [
+        "B7-T",
+        "B13-T",
+        "B11-F",
+        "B12-F",
+        "B14-F",
+        "B15-F",
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-13（post の空白だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-011 reply の本文が空白だけなら text_blank",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-012",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "1 字の本文はそのまま合格する",
+      "precondition": "なし",
+      "input": "あ（1 字）",
+      "expected": "そのまま",
+      "branches": [
+        "B7-F",
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-012 1 字の本文はそのまま合格する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-013",
+      "target": "truncateText",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "全角スペースだけの本文は text_blank",
+      "precondition": "なし",
+      "input": "全角スペース×2",
+      "expected": "detail=text_blank",
+      "branches": [
+        "B7-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は半角の空白だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-013 全角スペースだけの本文は text_blank",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-014",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "前後の空白は字数を数える前に除く（中身が 140 字ならそのまま）",
+      "precondition": "なし",
+      "input": "前に半角スペース 2 つ、後ろに改行を付けた あ×140",
+      "expected": "あ×140（空白を除いてから数える）",
+      "branches": [
+        "B7-F",
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-014 前後の空白は字数を数える前に除く（中身が 140 字ならそのまま）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-015",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "141 字（1 字だけ超え）は句点で切る",
+      "precondition": "なし",
+      "input": "あ×100。い×40（141 字）",
+      "expected": "あ×100。",
+      "branches": [
+        "B8-F",
+        "B9-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は 152 字）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-015 141 字（1 字だけ超え）は句点で切る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-016",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "140 字目が句点なら 140 字で切る",
+      "precondition": "なし",
+      "input": "あ×139。い×5",
+      "expected": "あ×139。（140 字）",
+      "branches": [
+        "B8-F",
+        "B9-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-016 140 字目が句点なら 140 字で切る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-017",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "141 字目の句点は使わず、140 字以内の最後の句点で切る",
+      "precondition": "なし",
+      "input": "あ×50。い×89。う（141 字目が句点）",
+      "expected": "あ×50。",
+      "branches": [
+        "B8-F",
+        "B9-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-017 141 字目の句点は使わず、140 字以内の最後の句点で切る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-018",
+      "target": "truncateText",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "切った結果がちょうど 20 字なら合格する",
+      "precondition": "なし",
+      "input": "あ×19！い×130",
+      "expected": "あ×19！（20 字）",
+      "branches": [
+        "B9-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-17 は 11 字）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-018 切った結果がちょうど 20 字なら合格する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-019",
+      "target": "truncateText",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "切った結果が 19 字なら text_too_long",
+      "precondition": "なし",
+      "input": "あ×18？い×130",
+      "expected": "detail=text_too_long",
+      "branches": [
+        "B9-T",
+        "B10-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-17（11 字、型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-019 切った結果が 19 字なら text_too_long",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_VAL-020",
+      "target": "truncateText",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "半角の ! ? では切らない（140 字以内に全角の句点がなければ text_too_long）",
+      "precondition": "なし",
+      "input": "あ×30!い×30?う×90（半角の ! ?）",
+      "expected": "detail=text_too_long",
+      "branches": [
+        "B9-F",
+        "B10-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_VAL-020 半角の ! ? では切らない（140 字以内に全角の句点がなければ text_too_long）",
+      "result": "",
+      "note": "確認事項 1 を参照"
+    }
+  ],
+  "issues": [
+    "確認事項 1：truncateText は 6.3 のとおり全角の「。！？」だけで切る。一方、consistencyChecker の splitSentences は半角の「!?」でも文を分ける。どちらも設計書どおりだが、文の区切りの扱いがそろっていない。"
+  ]
+}

@@ -1,0 +1,467 @@
+{
+  "title": "出力の取り出しと形の検証（generation/outputParser.ts）",
+  "ticket": "NOUS-103",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/generation/outputParser.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/generation/outputParser.test.ts（実装時、NOUS-62）",
+    "apps/server/src/generation/outputParser.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "なし（文字列と JSON と Zod だけを使う純粋関数）"
+  ],
+  "design_refs": [
+    "行動生成とプロンプトの設計 6.1・6.2",
+    "BE 詳細設計 generation 4章 parseOutput"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "thinkEnd >= 0（</think> がある）",
+      "location": "outputParser.ts:50"
+    },
+    {
+      "id": "B2",
+      "condition": "start < 0（{ がない）",
+      "location": "outputParser.ts:56"
+    },
+    {
+      "id": "B3",
+      "condition": "end < start（} が { より前にしかない）",
+      "location": "outputParser.ts:56"
+    },
+    {
+      "id": "B4",
+      "condition": "JSON.parse で例外",
+      "location": "outputParser.ts:60-64"
+    },
+    {
+      "id": "B5",
+      "condition": "!parsed.success（ActionSchema に合わない）",
+      "location": "outputParser.ts:67"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS62_DEV-01",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "素の JSON を取り出す",
+      "precondition": "なし",
+      "input": "{\"action\":\"post\",\"target\":null,\"text\":\"こんにちは\"}",
+      "expected": "{ action: post, target: null, text: こんにちは }",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F",
+        "B4-F",
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-01 素の JSON を取り出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-02",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "各入力 も取り出す",
+      "precondition": "なし",
+      "input": "```json の囲み、``` の囲み、前後の空白と文、</think> の後ろ",
+      "expected": "どれも { action: reply, target: P3, text: なるほど }",
+      "branches": [
+        "B1-T",
+        "B1-F",
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-02 %s も取り出す",
+      "result": "",
+      "note": "it.each の 4 行を 1 件として数える"
+    },
+    {
+      "id": "TC-NOUS62_DEV-03",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "null の項目が省略されていても null とみなす",
+      "precondition": "なし",
+      "input": "{\"action\":\"none\"}、{\"action\":\"like\",\"target\":\"P1\"}、follow の text: null",
+      "expected": "省略された項目は null になる",
+      "branches": [
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-03 null の項目が省略されていても null とみなす",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-04",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "各入力 は InvalidFormatError",
+      "precondition": "なし",
+      "input": "JSON がない・壊れている・未知の action・組み合わせの違反など 12 種",
+      "expected": "InvalidFormatError",
+      "branches": [
+        "B2-T",
+        "B4-T",
+        "B5-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-04 %s は InvalidFormatError",
+      "result": "",
+      "note": "複数の無効クラスを 1 件にまとめているため、detail は UT_OUT-002〜005 で 1 件ずつ確かめる"
+    },
+    {
+      "id": "TC-NOUS62_DEV-05",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "InvalidFormatError の kind は invalid_format で、理由を detail に残す",
+      "precondition": "なし",
+      "input": "\"JSON なし\"",
+      "expected": "kind=invalid_format、retryable=false、detail=no_json_object",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-05 InvalidFormatError の kind は invalid_format で、理由を detail に残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-001",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "</think> が 2 つあるときは、最後の </think> の後ろだけを使う",
+      "precondition": "なし",
+      "input": "<think>a</think>{\"action\":\"post\",...}</think>{\"action\":\"none\"}",
+      "expected": "{ action: none, target: null, text: null }（最後の </think> の後ろ）",
+      "branches": [
+        "B1-T",
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-02（</think> が 1 つのときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-001 </think> が 2 つあるときは、最後の </think> の後ろだけを使う",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-002",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "</think> の後ろに JSON がなければ、思考の中の JSON は使わず no_json_object",
+      "precondition": "なし",
+      "input": "<think>{\"action\":\"none\"}</think>今日はやめておきます",
+      "expected": "InvalidFormatError、detail=no_json_object",
+      "branches": [
+        "B1-T",
+        "B2-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（思考の中の JSON を使わないことは見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-002 </think> の後ろに JSON がなければ、思考の中の JSON は使わず no_json_object",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-003",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "} が { より前にしかないときは no_json_object",
+      "precondition": "なし",
+      "input": "\"} 投稿しません {\"",
+      "expected": "InvalidFormatError、detail=no_json_object",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は { がない場合だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-003 } が { より前にしかないときは no_json_object",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-004",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "JSON として読めなければ json_parse_error",
+      "precondition": "なし",
+      "input": "{\"action\":\"post\",}",
+      "expected": "InvalidFormatError、kind=invalid_format、detail=json_parse_error",
+      "branches": [
+        "B3-F",
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-04（例外の型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-004 JSON として読めなければ json_parse_error",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-005",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "スキーマに合わなければ detail が schema: で始まり、項目の名前を含む",
+      "precondition": "なし",
+      "input": "{\"action\":\"share\",\"target\":null,\"text\":null}",
+      "expected": "InvalidFormatError、detail が「schema: 」で始まり action を含む",
+      "branches": [
+        "B4-F",
+        "B5-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-04（例外の型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-005 スキーマに合わなければ detail が schema: で始まり、項目の名前を含む",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-006",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "P 番号の桁の下限と上限は合格する",
+      "precondition": "なし",
+      "input": "like の target = P1、P99",
+      "expected": "そのまま取り出す",
+      "branches": [
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は P3・P1 と、不合格の P100 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-006 P 番号の桁の下限と上限は合格する",
+      "result": "",
+      "note": "it.each の 2 行を 1 件として数える"
+    },
+    {
+      "id": "TC-UT_OUT-007",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "ハンドルの 3 字と 20 字は合格する",
+      "precondition": "なし",
+      "input": "follow の target = @abc、@ + a×20",
+      "expected": "そのまま取り出す",
+      "branches": [
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は不合格の 2 字だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-007 ハンドルの 3 字と 20 字は合格する",
+      "result": "",
+      "note": "it.each の 2 行を 1 件として数える"
+    },
+    {
+      "id": "TC-UT_OUT-008",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "ハンドルが 21 字なら InvalidFormatError",
+      "precondition": "なし",
+      "input": "follow の target = @ + a×21",
+      "expected": "InvalidFormatError（schema）",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-008 ハンドルが 21 字なら InvalidFormatError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-009",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "ハンドルに英数字と _ 以外の字があれば InvalidFormatError",
+      "precondition": "なし",
+      "input": "unfollow の target = @ha-ru",
+      "expected": "InvalidFormatError（schema）",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-009 ハンドルに英数字と _ 以外の字があれば InvalidFormatError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-010",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "P 番号に数字がなければ InvalidFormatError",
+      "precondition": "なし",
+      "input": "reply の target = P",
+      "expected": "InvalidFormatError（schema）",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は 3 桁と数字だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-010 P 番号に数字がなければ InvalidFormatError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-011",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "表にない余分なキーは捨てて取り出す",
+      "precondition": "なし",
+      "input": "like に \"reason\":\"好きな話題\" を足した JSON",
+      "expected": "reason を捨てた { action: like, target: P2, text: null }",
+      "branches": [
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-011 表にない余分なキーは捨てて取り出す",
+      "result": "",
+      "note": "設計書に記載なし。Zod の z.object の既定（余分なキーを捨てる）の値"
+    },
+    {
+      "id": "TC-UT_OUT-012",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "action が大文字まじり（Post）なら InvalidFormatError",
+      "precondition": "なし",
+      "input": "action = \"Post\"",
+      "expected": "InvalidFormatError（schema）",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は未知の語 share だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-012 action が大文字まじり（Post）なら InvalidFormatError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-013",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "text が文字列でなく数値なら InvalidFormatError",
+      "precondition": "なし",
+      "input": "post の text = 140（数値）",
+      "expected": "InvalidFormatError（schema）",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-013 text が文字列でなく数値なら InvalidFormatError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-014",
+      "target": "parseOutput",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "reply の target が null なら InvalidFormatError",
+      "precondition": "なし",
+      "input": "reply の target = null",
+      "expected": "InvalidFormatError（schema）",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-014 reply の target が null なら InvalidFormatError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-015",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "大文字の言語名（```JSON）と CRLF の囲みも外して取り出す",
+      "precondition": "なし",
+      "input": "```JSON\\r\\n{...}\\r\\n```",
+      "expected": "{ action: none, target: null, text: null }",
+      "branches": [
+        "B1-F",
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-02（小文字と LF だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-015 大文字の言語名（```JSON）と CRLF の囲みも外して取り出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OUT-016",
+      "target": "parseOutput",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "post の text が空文字でも形としては通す（空白の拒否は validateAction）",
+      "precondition": "なし",
+      "input": "post の text = \"\"",
+      "expected": "{ action: post, target: null, text: \"\" }（空白の拒否は validateAction で行う）",
+      "branches": [
+        "B5-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OUT-016 post の text が空文字でも形としては通す（空白の拒否は validateAction）",
+      "result": "",
+      "note": "確認事項 1 を参照"
+    }
+  ],
+  "issues": [
+    "確認事項 1：6.1 は post・reply の text を「必須、1〜140 字」とするが、parseOutput は空文字や 141 字以上も通し、validateAction の truncateText で拒否・切り詰めを行う（実装のコメントのとおり）。結果の invalid_format は同じなので、設計書の 6.2 の手順 4 に「字数は 6.3 で見る」と書き足すことを提案する。"
+  ]
+}
