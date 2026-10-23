@@ -1,0 +1,874 @@
+{
+  "ticket": "NOUS-104",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "title": "再試行と待機・停止判定（generation/retryPolicy.ts）",
+  "targets": [
+    "apps/server/src/generation/retryPolicy.ts"
+  ],
+  "test_files": [
+    "apps/server/src/generation/retryPolicy.test.ts（実装時、NOUS-63・83）",
+    "apps/server/src/generation/retryPolicy.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "DB（generation_attempts・daily_usage・world_settings）",
+    "時計（Clock.sleep・now）",
+    "LLM の呼び出し（引数の関数で差し替え）",
+    "AbortSignal（緊急停止の signal・待ちだけを打ち切る stopSignal）",
+    "ロガー"
+  ],
+  "design_refs": [
+    "BE 詳細設計 generation 2章（外部連携のリトライ方針）・4章 callWithRetry・waitOrStop・6章",
+    "基本設計書 概要 5章 異常系1",
+    "NOUS-83（AC-P06、一時停止・上限停止で待ちを打ち切る）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "isCancellation：signal?.aborted",
+      "location": "retryPolicy.ts:81"
+    },
+    {
+      "id": "B2",
+      "condition": "isCancellation：時計か LLM の CancelledError",
+      "location": "retryPolicy.ts:82"
+    },
+    {
+      "id": "B3",
+      "condition": "waitOrStop：待つ前に signal.aborted",
+      "location": "retryPolicy.ts:94"
+    },
+    {
+      "id": "B4",
+      "condition": "waitOrStop：待つ前に stopSignal?.aborted",
+      "location": "retryPolicy.ts:97"
+    },
+    {
+      "id": "B5",
+      "condition": "waitOrStop：stopSignal があれば AbortSignal.any で合成",
+      "location": "retryPolicy.ts:101"
+    },
+    {
+      "id": "B6",
+      "condition": "waitOrStop：sleep の失敗で signal.aborted",
+      "location": "retryPolicy.ts:106"
+    },
+    {
+      "id": "B7",
+      "condition": "waitOrStop：sleep の失敗で stopSignal?.aborted（偽ならそのまま投げる）",
+      "location": "retryPolicy.ts:109-112"
+    },
+    {
+      "id": "B8",
+      "condition": "waitOrStop：待った後に signal.aborted",
+      "location": "retryPolicy.ts:115"
+    },
+    {
+      "id": "B9",
+      "condition": "waitOrStop：待った後に stopSignal?.aborted",
+      "location": "retryPolicy.ts:118"
+    },
+    {
+      "id": "B10",
+      "condition": "loadLimitsSettings：world_settings の行がある（偽なら fallback ?? null）",
+      "location": "retryPolicy.ts:125-126"
+    },
+    {
+      "id": "B11",
+      "condition": "toTemporaryFailureKind：timeout か rate_limited（偽なら server_error）",
+      "location": "retryPolicy.ts:130"
+    },
+    {
+      "id": "B12",
+      "condition": "callWithRetry：attemptNo > 4",
+      "location": "retryPolicy.ts:146"
+    },
+    {
+      "id": "B13",
+      "condition": "呼ぶ前に signal.aborted",
+      "location": "retryPolicy.ts:151"
+    },
+    {
+      "id": "B14",
+      "condition": "成功の後に signal.aborted",
+      "location": "retryPolicy.ts:161"
+    },
+    {
+      "id": "B15",
+      "condition": "失敗が取り消し（isCancellation）",
+      "location": "retryPolicy.ts:173"
+    },
+    {
+      "id": "B16",
+      "condition": "取り消しの例外の型がそのまま CancelledError（偽なら ClockCancelledError に変える）",
+      "location": "retryPolicy.ts:183"
+    },
+    {
+      "id": "B17",
+      "condition": "!isLlmError(err)",
+      "location": "retryPolicy.ts:189"
+    },
+    {
+      "id": "B18",
+      "condition": "FreeTierExceededError（3036）",
+      "location": "retryPolicy.ts:214"
+    },
+    {
+      "id": "B19",
+      "condition": "!err.retryable（400・401・invalid_format）",
+      "location": "retryPolicy.ts:220"
+    },
+    {
+      "id": "B20",
+      "condition": "最後の再試行か、試行が 4 に達した",
+      "location": "retryPolicy.ts:230"
+    },
+    {
+      "id": "B21",
+      "condition": "上限の設定がある（偽なら上限を見ない）",
+      "location": "retryPolicy.ts:243"
+    },
+    {
+      "id": "B22",
+      "condition": "!shouldContinue() || !withinLimits",
+      "location": "retryPolicy.ts:245"
+    }
+  ],
+  "issues": [
+    "確認事項 1：runs の上限ちょうど。この生成イベントの最初の試行で daily_usage.runs が上限に達すると、待ちの後の上限の確認で StoppedError になり、上限の中で始めた最後の 1 回が再試行できない（TC-NOUS63_DEV-12 がこの動きを期待している）。runs は「LLM を呼んだ生成イベントの数」なので、同じイベントの再試行は runs の上限で止めない方が設計の意図に近いと考える。仕様の確認を求める",
+    "確認事項 2：呼び出しが成功した直後に signal が abort されると、試行を記録せずに CancelledError になる（TC-UT_RTY-019）。消費した Neurons が daily_usage に入らない。緊急停止のときだけで影響は小さい。設計書に記載がないため、テストは実装の値で書いた",
+    "確認事項 3：TC-NOUS63_DEV-09・10・12、TC-NOUS83_DEV-04 は、callWithRetry を呼んだ直後に clock.advance するため、sleep が張られる前に時刻が進む可能性がある（FakeClock.advance は呼んだ時点のタイマーだけを解決する）。実施のときに落ちたら、テストの書き方の問題として切り分ける。UT ではタイマーが張られるのを待ってから進めている",
+    "分岐 B12 の真（startAttemptNo が 5 以上）は TC-NOUS63_DEV-13 で通る。opportunityRunner からは 5 以上で呼ばれることはない"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS63_DEV-07",
+      "target": "waitOrStop",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "指定ミリ秒だけ待ち、待ち中の signal の abort で CancelledError",
+      "precondition": "FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "30,000 ミリ秒",
+      "expected": "resolve／CancelledError",
+      "branches": [
+        "B3-F",
+        "B4-F",
+        "B6-T",
+        "B8-F",
+        "B9-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-07 waitOrStop は指定ミリ秒だけ待ち、abort されたら CancelledError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-08",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "1 回目で成功したら試行を記録せず attemptNo=1 を返す",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "成功を返す呼び出し",
+      "expected": "attemptNo=1、startedAt・usageDate、generation_attempts は 0 件",
+      "branches": [
+        "B12-F",
+        "B13-F",
+        "B14-F"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-08 callWithRetry は 1 回目で成功したとき試行を記録せず結果と attemptNo=1 を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-09",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "timeout→429(3040)→成功。30 秒・120 秒の順に待ち attemptNo=3",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "3 回目で成功する呼び出し",
+      "expected": "attemptNo=3、試行 2 件（timeout・rate_limited）、daily_usage calls=2・runs=1",
+      "branches": [
+        "B11-T",
+        "B15-F",
+        "B17-F",
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B21-T",
+        "B22-F"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-09 一時的な失敗は 30 秒・120 秒の順に待ち、3 回目で成功すれば attemptNo=3 を返す",
+      "result": "",
+      "note": "確認事項 3"
+    },
+    {
+      "id": "TC-NOUS63_DEV-10",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "3 回目も一時的な失敗なら最後の種類の TemporaryFailureError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "timeout・429・503",
+      "expected": "TemporaryFailureError（server_error）、試行 3 件",
+      "branches": [
+        "B11-F",
+        "B20-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-10 3 回目も一時的な失敗なら記録して最後の失敗種別の TemporaryFailureError を投げる",
+      "result": "",
+      "note": "確認事項 3"
+    },
+    {
+      "id": "TC-NOUS63_DEV-11",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "3036 と 401 は再試行せずに投げる",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "FreeTierExceededError／ServerError(401)",
+      "expected": "FreeTierExceededError／TemporaryFailureError（server_error、401）",
+      "branches": [
+        "B18-T",
+        "B19-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-11 FreeTierExceededError と 400/401 の ServerError は再試行せずに即座に投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-12",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "待ちの後に shouldContinue=false か日次上限で StoppedError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、runs 上限 1 の世界",
+      "input": "timeout／429",
+      "expected": "StoppedError",
+      "branches": [
+        "B10-T",
+        "B22-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-12 再試行の待ちの後に shouldContinue() が false または日次上限到達なら StoppedError を投げる",
+      "result": "",
+      "note": "確認事項 1・3"
+    },
+    {
+      "id": "TC-NOUS63_DEV-13",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "試行番号が 4 なら 1 回だけ、5 なら呼ばずに TemporaryFailureError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "startAttemptNo=4・5",
+      "expected": "4：試行 1 件で timeout、5：呼ばない",
+      "branches": [
+        "B12-T",
+        "B12-F",
+        "B20-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-13 1 つの生成イベントの試行番号が上限 4 に達したら再試行せず TemporaryFailureError にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-14",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "LLM の CancelledError は cancelled を記録して投げ直す",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "LlmCancelledError",
+      "expected": "LlmCancelledError、試行 cancelled",
+      "branches": [
+        "B15-T",
+        "B16-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-14 LLM の CancelledError または signal.aborted のときは cancelled で記録して投げ直す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS83_DEV-01",
+      "target": "waitOrStop",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "待つ前・待ち中の stopSignal で StoppedError",
+      "precondition": "FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "stopSignal を abort",
+      "expected": "StoppedError",
+      "branches": [
+        "B4-T",
+        "B5-T",
+        "B7-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-01 waitOrStop は待機前または待機中に stopSignal が abort されたら StoppedError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS83_DEV-02",
+      "target": "waitOrStop",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "signal と stopSignal の両方なら signal を優先",
+      "precondition": "FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "両方を abort",
+      "expected": "CancelledError",
+      "branches": [
+        "B3-T",
+        "B6-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-02 waitOrStop は signal と stopSignal の両方が abort された場合は signal を優先して CancelledError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS83_DEV-03",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "待ち中の stopSignal で時計を進めずに StoppedError、試行 1 件（AC-P06）",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "timeout の後に stopSignal を abort",
+      "expected": "StoppedError、試行 1 件",
+      "branches": [
+        "B5-T",
+        "B7-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-03 callWithRetry は一時的な失敗の再試行待ちの途中で stopSignal が abort されたら時計を進めずに StoppedError になり試行は1件だけ記録される",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS83_DEV-04",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "stopSignal が無ければ従来どおり待って再試行",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "timeout の後に成功",
+      "expected": "attemptNo=2",
+      "branches": [
+        "B5-F"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-04 callWithRetry は stopSignal が渡されない場合は従来どおり再試行の待ちを完了して動作する",
+      "result": "",
+      "note": "確認事項 3"
+    },
+    {
+      "id": "TC-NOUS83_DEV-05",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "呼び出し中の stopSignal では呼び出しの完了を待つ",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "呼び出し中に stopSignal を abort して成功",
+      "expected": "成功の結果を返す",
+      "branches": [
+        "B14-F"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-05 callWithRetry は LLM 呼び出しの最中に stopSignal が abort されても呼び出し完了を待つ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-001",
+      "target": "waitOrStop",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "待つ前に signal が abort 済みなら sleep を張らずに CancelledError",
+      "precondition": "FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "abort 済みの signal、30,000 ミリ秒",
+      "expected": "CancelledError、張られた sleep は 0 件",
+      "branches": [
+        "B3-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z",
+      "dev_ref": "一部 TC-NOUS83_DEV-02（両方 abort のときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-001 waitOrStop は待つ前に signal が abort 済みなら sleep を張らずに CancelledError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-002",
+      "target": "waitOrStop",
+      "category": "異常系",
+      "technique": "依存",
+      "viewpoint": "sleep が abort 以外で失敗したら、その例外をそのまま投げる",
+      "precondition": "なし",
+      "input": "sleep が Error('sleep failed') で失敗する Clock",
+      "expected": "同じ Error",
+      "branches": [
+        "B5-T",
+        "B6-F",
+        "B7-F"
+      ],
+      "mock": "Clock の sleep を差し替え（reject）",
+      "dev_ref": "なし（DEV は abort の失敗だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-002 waitOrStop は sleep が abort 以外の理由で失敗したら、その例外をそのまま投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-003",
+      "target": "waitOrStop",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "sleep が終わった時点で signal が abort されていれば CancelledError",
+      "precondition": "なし",
+      "input": "sleep の中で signal を abort して resolve する Clock",
+      "expected": "CancelledError",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "Clock の sleep を差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-003 waitOrStop は sleep が終わった時点で signal が abort されていれば CancelledError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-004",
+      "target": "waitOrStop",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "sleep が終わった時点で stopSignal が abort されていれば StoppedError",
+      "precondition": "なし",
+      "input": "sleep の中で stopSignal を abort して resolve する Clock",
+      "expected": "StoppedError",
+      "branches": [
+        "B8-F",
+        "B9-T"
+      ],
+      "mock": "Clock の sleep を差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-004 waitOrStop は sleep が終わった時点で stopSignal が abort されていれば StoppedError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-005",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "1 回目の失敗の後、29,999 ミリ秒では呼ばず 30,000 ミリ秒で 2 回目を呼ぶ",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "timeout の後に成功",
+      "expected": "29,999：呼び出し 1 回、30,000：2 回、attemptNo=2",
+      "branches": [
+        "B20-F",
+        "B22-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、呼び出しの関数",
+      "dev_ref": "一部 TC-NOUS63_DEV-09（30 秒ちょうどだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-005 1 回目の失敗の後は 29,999 ミリ秒では呼ばず、30,000 ミリ秒で 2 回目を呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-006",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "2 回目の失敗の後、119,999 ミリ秒では呼ばず 120,000 ミリ秒で 3 回目を呼ぶ",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "timeout・timeout の後に成功",
+      "expected": "119,999：呼び出し 2 回、120,000：3 回、attemptNo=3",
+      "branches": [
+        "B20-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、呼び出しの関数",
+      "dev_ref": "一部 TC-NOUS63_DEV-09（120 秒ちょうどだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-006 2 回目の失敗の後は 119,999 ミリ秒では呼ばず、120,000 ミリ秒で 3 回目を呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-007",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "再試行の対象の失敗（timeout・429(3040)・500・502・503・success=false）は 30 秒待って再試行し、1 回目の試行をその種類で記録する",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "各失敗の後に成功（6 通り）",
+      "expected": "attemptNo=2、試行 1 件（result と http_status が失敗の種類のとおり）",
+      "branches": [
+        "B11-T",
+        "B11-F",
+        "B19-F",
+        "B20-F"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "一部 TC-NOUS63_DEV-09・10（timeout・429・503 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-007 再試行の対象の失敗は 30 秒待って 2 回目を呼び、1 回目の試行をその種類で記録する",
+      "result": "",
+      "note": "設計書 2章：5xx はすべて server_error、success=false も server_error"
+    },
+    {
+      "id": "TC-UT_RTY-008",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "400 は再試行せずに server_error の TemporaryFailureError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "ServerError(400)",
+      "expected": "TemporaryFailureError（server_error、httpStatus 400）、呼び出し 1 回、sleep なし、試行 1 件",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし（DEV-11 は 401 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-008 400 の ServerError は再試行せずに server_error の TemporaryFailureError になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-009",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "3036 は待たずに FreeTierExceededError を投げ、試行を free_tier で記録し daily_usage を 1 回分加算する",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "FreeTierExceededError(429, code 3036)",
+      "expected": "FreeTierExceededError、呼び出し 1 回、試行 free_tier・429・code 3036、daily_usage calls=1・runs=1",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "一部 TC-NOUS63_DEV-11（記録は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-009 429・3036 は待たずに FreeTierExceededError を投げ、試行を free_tier で記録し daily_usage を 1 回分加算する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-010",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "LlmError でない例外は試行を記録せずにそのまま投げる",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "TypeError",
+      "expected": "同じ TypeError、試行 0 件、daily_usage 0 件",
+      "branches": [
+        "B15-F",
+        "B17-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-010 LlmError でない例外は試行を記録せずにそのまま投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-011",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "呼び出しが InvalidFormatError を投げたら再試行せず server_error の TemporaryFailureError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "InvalidFormatError",
+      "expected": "TemporaryFailureError（server_error）、呼び出し 1 回、試行 invalid_format",
+      "branches": [
+        "B11-F",
+        "B19-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-011 呼び出しが InvalidFormatError を投げたら再試行せず、server_error の TemporaryFailureError にする",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（固定応答・Cloudflare の実装からは投げない防御の分岐）"
+    },
+    {
+      "id": "TC-UT_RTY-012",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "待ちの後、Neurons が日次上限の手前（99.9／100）なら再試行する",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、Neurons 上限 100 の世界、daily_usage neurons=99.9",
+      "input": "timeout の後に成功",
+      "expected": "attemptNo=2、呼び出し 2 回",
+      "branches": [
+        "B10-T",
+        "B21-T",
+        "B22-F"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし（DEV-12 は runs の上限だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-012 待ちの後、Neurons が日次上限の手前（上限 100 に対して 99.9）なら再試行する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-013",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "待ちの後、Neurons が日次上限ちょうど（100／100）なら呼ばずに StoppedError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、Neurons 上限 100 の世界、daily_usage neurons=100",
+      "input": "timeout が続く呼び出し",
+      "expected": "StoppedError、呼び出し 1 回",
+      "branches": [
+        "B22-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし（DEV-12 は runs の上限だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-013 待ちの後、Neurons が日次上限ちょうど（上限 100 に対して 100）なら呼ばずに StoppedError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-014",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "world_settings が無いときは ctx.settings の上限で判定し、上限なら StoppedError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、world_settings の無い世界、daily_usage runs=5",
+      "input": "timeout、settings={neurons 9500, runs 5}",
+      "expected": "StoppedError",
+      "branches": [
+        "B10-F",
+        "B21-T",
+        "B22-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-014 world_settings が無いときは ctx.settings の上限で判定し、上限に達していれば StoppedError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-015",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "world_settings も ctx.settings も無いときは上限を見ずに再試行する",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、world_settings の無い世界、daily_usage が既定の上限を超えている",
+      "input": "timeout の後に成功",
+      "expected": "attemptNo=2",
+      "branches": [
+        "B10-F",
+        "B21-F"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-015 world_settings も ctx.settings も無いときは上限を見ずに再試行する",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（単体テスト用のフォールバック）"
+    },
+    {
+      "id": "TC-UT_RTY-016",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "startAttemptNo=3 なら 3 回目と 4 回目の 2 回だけ呼ぶ",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "429 が続く呼び出し、startAttemptNo=3",
+      "expected": "TemporaryFailureError（rate_limited）、呼び出し 2 回、試行 3・4、待ちは 30 秒の 1 回だけ",
+      "branches": [
+        "B12-F",
+        "B20-F",
+        "B20-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "一部 TC-NOUS63_DEV-13（4・5 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-016 startAttemptNo=3 なら 3 回目と 4 回目の 2 回だけ呼び、4 回目も失敗なら TemporaryFailureError を投げる",
+      "result": "",
+      "note": "NOUS-63 の決定：1 つの生成イベントの試行は 4 回まで"
+    },
+    {
+      "id": "TC-UT_RTY-017",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "呼ぶ前に signal が abort 済みなら、呼ばず・記録せずに CancelledError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "abort 済みの signal",
+      "expected": "CancelledError、呼び出し 0 回、試行 0 件",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-017 呼ぶ前に signal が abort 済みなら、呼ばず・記録せずに CancelledError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-018",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "呼び出し中に signal が abort され TimeoutError で終わったら cancelled で記録して CancelledError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "abort してから TimeoutError を投げる呼び出し",
+      "expected": "ClockCancelledError、試行 1 件（cancelled）、sleep なし",
+      "branches": [
+        "B1-T",
+        "B15-T",
+        "B16-F"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "一部 TC-NOUS63_DEV-14（LLM の CancelledError だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-018 呼び出し中に signal が abort され、呼び出しが TimeoutError で終わったら cancelled で記録して CancelledError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-019",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "呼び出しが成功した直後に signal が abort されていたら CancelledError、試行は記録しない",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "abort してから成功を返す呼び出し",
+      "expected": "ClockCancelledError、試行 0 件",
+      "branches": [
+        "B14-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-019 呼び出しが成功した直後に signal が abort されていたら CancelledError を投げ、試行は記録しない",
+      "result": "",
+      "note": "確認事項 2。設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_RTY-020",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "再試行の待ちの途中で signal が abort されたら、2 回目を呼ばずに CancelledError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "timeout の後、待ち中に signal を abort",
+      "expected": "ClockCancelledError、呼び出し 1 回、試行 1 件（timeout）",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、呼び出しの関数",
+      "dev_ref": "なし（DEV は待ち中の stopSignal だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-020 再試行の待ちの途中で signal が abort されたら、2 回目を呼ばずに CancelledError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-021",
+      "target": "callWithRetry",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "呼び出し中に stopSignal が abort され、その呼び出しが一時的な失敗なら、待たずに StoppedError（AC-P06）",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "stopSignal を abort してから 429 を投げる呼び出し",
+      "expected": "StoppedError、呼び出し 1 回、時計は進まない、試行 1 件（rate_limited）",
+      "branches": [
+        "B4-T"
+      ],
+      "mock": "呼び出しの関数",
+      "dev_ref": "なし（DEV-83-05 は呼び出しが成功する場合だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-021 呼び出し中に stopSignal が abort され、その呼び出しが一時的な失敗なら、待たずに StoppedError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-022",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "失敗した試行は warn のログに eventId・attemptNo・kind・httpStatus を出す",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "ServerError(401)",
+      "expected": "「LLM attempt failed」の行に eventId・server_error・401 が入る",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "ロガー（sinks で行を集める）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-022 失敗した試行は warn のログに eventId・attemptNo・kind・httpStatus を出す",
+      "result": "",
+      "note": "設計書 6章：warn（実行 ID・試行の番号・HTTP の状態）"
+    },
+    {
+      "id": "TC-UT_RTY-023",
+      "target": "isCancellation",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "取り消しの例外か signal の abort を取り消しと判定する",
+      "precondition": "なし",
+      "input": "時計・LLM の CancelledError、abort 済みの TimeoutError、abort されていない TimeoutError",
+      "expected": "true・true・true・false",
+      "branches": [
+        "B1-T",
+        "B1-F",
+        "B2-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は callWithRetry 経由だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_RTY-023 isCancellation は取り消しの例外か signal の abort を取り消しと判定する",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
