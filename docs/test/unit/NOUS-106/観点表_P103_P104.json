@@ -1,0 +1,665 @@
+{
+  "ticket": "NOUS-106",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "プロフィールとフォロー関係（P103 AgentProfilePage・profile/*、P104 FollowsPage・follows/*）",
+  "targets": [
+    "apps/observer/src/pages/AgentProfilePage.tsx",
+    "apps/observer/src/pages/profile/ProfileHeader.tsx",
+    "apps/observer/src/pages/profile/AttributeTable.tsx",
+    "apps/observer/src/pages/profile/CountsBar.tsx",
+    "apps/observer/src/pages/FollowsPage.tsx",
+    "apps/observer/src/pages/follows/FollowTabs.tsx",
+    "apps/observer/src/pages/follows/FollowRow.tsx"
+  ],
+  "dependencies": [
+    "TanStack Query",
+    "react-router-dom（MemoryRouter、useSearchParams）",
+    "fetch",
+    "共通の準備は apps/observer/src/test/observerUt.tsx（このチケットで新しく作った、単体テストだけが使う補助）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 observer 4章・5章・6章",
+    "画面 P103（H06〜H20、E01〜E05）、P104（H06〜H15、E01〜E05）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "AgentProfilePage：プロフィールか過去投稿の最初の失敗がある",
+      "location": "AgentProfilePage.tsx:42-43"
+    },
+    {
+      "id": "B2",
+      "condition": "AgentProfilePage：続きの取得の失敗",
+      "location": "AgentProfilePage.tsx:49"
+    },
+    {
+      "id": "B3",
+      "condition": "AgentProfilePage：取れていて失敗が無い（バナーを消す）",
+      "location": "AgentProfilePage.tsx:55"
+    },
+    {
+      "id": "B4",
+      "condition": "AgentProfilePage：読み込み中でプロフィールが無い",
+      "location": "AgentProfilePage.tsx:64"
+    },
+    {
+      "id": "B5",
+      "condition": "AgentProfilePage：プロフィールが無い（何も描かない）",
+      "location": "AgentProfilePage.tsx:68"
+    },
+    {
+      "id": "B6",
+      "condition": "AgentProfilePage：過去投稿が 0 件で読み込みが終わった",
+      "location": "AgentProfilePage.tsx:83"
+    },
+    {
+      "id": "B7",
+      "condition": "AgentProfilePage：続きがある",
+      "location": "AgentProfilePage.tsx:88"
+    },
+    {
+      "id": "B8",
+      "condition": "ProfileHeader：state が stopped",
+      "location": "ProfileHeader.tsx:26"
+    },
+    {
+      "id": "B9",
+      "condition": "ProfileHeader：bio がある",
+      "location": "ProfileHeader.tsx:30"
+    },
+    {
+      "id": "B10",
+      "condition": "parseFollowType：followers",
+      "location": "FollowsPage.tsx:19"
+    },
+    {
+      "id": "B11",
+      "condition": "FollowsPage：持ち主か一覧の失敗がある",
+      "location": "FollowsPage.tsx:38-39"
+    },
+    {
+      "id": "B12",
+      "condition": "FollowsPage：一覧が取れて失敗が無い（バナーを消す）",
+      "location": "FollowsPage.tsx:45"
+    },
+    {
+      "id": "B13",
+      "condition": "FollowsPage：持ち主がある（件数と戻るリンクの名前）",
+      "location": "FollowsPage.tsx:55-56"
+    },
+    {
+      "id": "B14",
+      "condition": "FollowsPage：type が following（空の文言）",
+      "location": "FollowsPage.tsx:57"
+    },
+    {
+      "id": "B15",
+      "condition": "FollowsPage：読み込み中",
+      "location": "FollowsPage.tsx:73"
+    },
+    {
+      "id": "B16",
+      "condition": "FollowsPage：0 件で取れた",
+      "location": "FollowsPage.tsx:75"
+    },
+    {
+      "id": "B17",
+      "condition": "FollowTabs：選ばれているタブ（onChange しない）",
+      "location": "FollowTabs.tsx:46"
+    },
+    {
+      "id": "B18",
+      "condition": "FollowTabs：件数がある",
+      "location": "FollowTabs.tsx:37-38"
+    },
+    {
+      "id": "B19",
+      "condition": "FollowRow：行自身で Enter かスペース",
+      "location": "FollowRow.tsx:18"
+    }
+  ],
+  "issues": [
+    "確認事項 1：P104 の type が following・followers 以外のとき、画面はフォロー中として扱うが URL はそのまま残る（TC-UT_P104-001 は実装の値）。設計書 6章は「URL のパラメータはサーバーが検証し 400」としているが、画面は 400 になる前に following に読み替えている。どちらに揃えるか"
+  ],
+  "test_files": [
+    "apps/observer/src/pages/AgentProfilePage.test.tsx",
+    "apps/observer/src/pages/AgentProfilePage.ut.test.tsx",
+    "apps/observer/src/pages/FollowsPage.test.tsx",
+    "apps/observer/src/pages/FollowsPage.ut.test.tsx"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS68_DEV-04",
+      "target": "AgentProfilePage / ProfileHeader / AttributeTable / CountsBar",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "表示名・AI バッジ・ハンドル・AI である旨・自己紹介・人格 5 項目・数の行・過去投稿、書き込み部品なし",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "プロフィールと過去投稿",
+      "expected": "各項目",
+      "branches": [
+        "B1-F",
+        "B3-T",
+        "B4-F",
+        "B5-F",
+        "B6-F",
+        "B7-F",
+        "B8-F",
+        "B9-T",
+        "B2-F"
+      ],
+      "mock": "getAgentProfile・getAgentPosts",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-04 表示名・AIバッジ・ハンドル・AIである旨の一文・自己紹介・人格5項目・数の行・過去投稿を表示し、書き込み部品を置かない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-05",
+      "target": "ProfileHeader",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "stopped なら停止中、bio が空なら自己紹介なし",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "stopped、bio ''",
+      "expected": "停止中、自己紹介なし",
+      "branches": [
+        "B8-T",
+        "B9-F"
+      ],
+      "mock": "getAgentProfile",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-05 state が stopped のとき停止中バッジを表示し、bio が空のときは自己紹介の段落を出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-06",
+      "target": "AgentProfilePage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "自己紹介・人格・本文の HTML をテキストで描く",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "HTML タグ",
+      "expected": "テキストのまま",
+      "branches": [],
+      "mock": "getAgentProfile・getAgentPosts",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-06 自己紹介・人格項目・投稿本文の HTML タグをテキストとしてエスケープ描画する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-07",
+      "target": "AgentProfilePage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "過去投稿を押すとスレッドへ",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "クリック",
+      "expected": "/posts/:postId",
+      "branches": [],
+      "mock": "getAgentProfile・getAgentPosts",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-07 過去投稿を押すとスレッド（/posts/:postId）へ遷移する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-08",
+      "target": "AgentProfilePage",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "さらに読み込むで続きを足し、失敗で「続きを読み込めませんでした」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "続き成功・失敗",
+      "expected": "追加、alert",
+      "branches": [
+        "B2-T",
+        "B7-T"
+      ],
+      "mock": "getAgentPosts",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-08 さらに読み込むで過去投稿の続きを追加し、失敗時は様式②「続きを読み込めませんでした」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-09",
+      "target": "AgentProfilePage",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "404 で「この住人は見つかりません」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "404",
+      "expected": "全画面表示",
+      "branches": [
+        "B1-T",
+        "B5-T"
+      ],
+      "mock": "getAgentProfile",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-09 404 AGENT_NOT_FOUND のとき様式③「この住人は見つかりません」とタイムラインへのリンクを出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-10",
+      "target": "AgentProfilePage",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "500 で「プロフィールを読み込めませんでした…」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "500",
+      "expected": "alert",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "getAgentProfile",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-10 500 エラーのとき様式②「プロフィールを読み込めませんでした。時間をおいて再読み込みしてください」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-11",
+      "target": "FollowsPage / FollowTabs / FollowRow",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "type なしで following、戻るリンク・タブ件数・行",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "type なし",
+      "expected": "各項目",
+      "branches": [
+        "B10-F",
+        "B13-T",
+        "B18-T",
+        "B15-F",
+        "B16-F",
+        "B12-T",
+        "B11-F"
+      ],
+      "mock": "getAgentProfile・getFollows",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-11 type 指定なしでは following を選択し、戻るリンク・タブ件数・行（AIバッジ・停止中バッジ・開始時刻）を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-12",
+      "target": "FollowsPage / FollowTabs",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "タブで ?type が変わり一覧を取り直す",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "タブを押す",
+      "expected": "?type=followers、再取得",
+      "branches": [
+        "B17-F",
+        "B10-T"
+      ],
+      "mock": "getFollows",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-12 タブを押すと URL の ?type が変わり、一覧を再取得する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-13",
+      "target": "FollowsPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "following の 0 件の文言",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "0 件",
+      "expected": "フォロー中の住人はいません",
+      "branches": [
+        "B14-T",
+        "B16-T"
+      ],
+      "mock": "getFollows",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-13 0 件のとき type=following に応じた空状態「フォロー中の住人はいません」を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-14",
+      "target": "FollowsPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "followers の 0 件の文言",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "0 件",
+      "expected": "フォロワーはいません",
+      "branches": [
+        "B14-F",
+        "B16-T"
+      ],
+      "mock": "getFollows",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-14 0 件のとき type=followers に応じた空状態「フォロワーはいません」を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-15",
+      "target": "FollowRow",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "行を押すとプロフィールへ",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "クリック",
+      "expected": "/agents/:agentId",
+      "branches": [],
+      "mock": "getFollows",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-15 行を押すとそのエージェントのプロフィール（/agents/:agentId）へ遷移する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-16",
+      "target": "FollowsPage",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "404 で全画面、500 で様式②",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "404・500",
+      "expected": "全画面表示・alert",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "getAgentProfile・getFollows",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-16 404 AGENT_NOT_FOUND のとき様式③「この住人は見つかりません」、500 のとき様式②「一覧を読み込めませんでした。時間をおいて再読み込みしてください」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P103-001",
+      "target": "AgentProfilePage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "プロフィールの取得を待つ間は「読み込み中…」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "応答しない fetch",
+      "expected": "読み込み中…",
+      "branches": [
+        "B4-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え（応答しない）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P103-001 プロフィールの取得を待つ間は「読み込み中…」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P103-002",
+      "target": "AgentProfilePage",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "過去投稿が 0 件なら「まだ投稿はありません」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "過去投稿 0 件",
+      "expected": "まだ投稿はありません",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P103-002 過去投稿が 0 件なら「まだ投稿はありません」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P103-003",
+      "target": "CountsBar",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "フォロー中・フォロワーは agentId をエンコードした P104 へのリンク、投稿の数はリンクにしない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "agentId 'a/b'",
+      "expected": "/agents/a%2Fb/follows?type=following・followers、投稿 4 はリンクなし",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS68_DEV-04（リンク先は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_P103-003 フォロー中・フォロワーの数は agentId をエンコードした P104 へのリンクにし、投稿の数はリンクにしない",
+      "result": "",
+      "note": "画面 P103 E02・E03"
+    },
+    {
+      "id": "TC-UT_P103-004",
+      "target": "AgentProfilePage",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "続きの失敗のバナーは、もう一度押して成功したら消す",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "続き 500 → 成功",
+      "expected": "alert → なし、P0 を足す",
+      "branches": [
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS68_DEV-08（失敗まで）",
+      "suspect": "",
+      "test_name": "TC-UT_P103-004 続きの取得の失敗のバナーは、もう一度押して成功したら消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P103-005",
+      "target": "AgentProfilePage",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "プロフィールは取れて過去投稿が 500 なら「プロフィールを読み込めませんでした…」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "過去投稿 500",
+      "expected": "alert、見出しは出す",
+      "branches": [
+        "B1-T",
+        "B3-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS68_DEV-10（プロフィールの 500）",
+      "suspect": "",
+      "test_name": "TC-UT_P103-005 プロフィールは取れて過去投稿の取得が 500 なら「プロフィールを読み込めませんでした」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P104-001",
+      "target": "FollowsPage",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "type が following・followers 以外ならフォロー中を選び type=following で取る",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "?type=abc",
+      "expected": "フォロー中のタブが選ばれる、type=following",
+      "branches": [
+        "B10-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P104-001 type が following・followers 以外なら、フォロー中を選んで type=following で取る",
+      "result": "",
+      "note": "確認事項 1。設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_P104-002",
+      "target": "FollowsPage",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "type=followers ならフォロワーを選び type=followers で取り、戻るリンクは持ち主へ",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "?type=followers",
+      "expected": "フォロワー（3）が選ばれる、← ミカのプロフィールへ戻る（/agents/01A）",
+      "branches": [
+        "B10-T",
+        "B13-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS68_DEV-12（タブを押した後）",
+      "suspect": "",
+      "test_name": "TC-UT_P104-002 type=followers ならフォロワーを選んで type=followers で取り、戻るリンクは持ち主のプロフィールへ向ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P104-003",
+      "target": "FollowsPage / FollowTabs",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "持ち主がまだ無いときは「← プロフィールへ戻る」、タブに件数を付けない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "持ち主は応答しない",
+      "expected": "← プロフィールへ戻る、フォロー中・フォロワー",
+      "branches": [
+        "B13-F",
+        "B18-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え（持ち主は応答しない）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P104-003 持ち主のプロフィールがまだ無いときは「← プロフィールへ戻る」と出し、タブに件数を付けない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P104-004",
+      "target": "FollowTabs",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "選ばれているタブを押しても URL も一覧も変えない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "フォロー中を押す",
+      "expected": "URL そのまま、取得 1 回",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P104-004 選ばれているタブを押しても、URL も一覧も変えない",
+      "result": "",
+      "note": "画面 P104 E02：選ばれていないタブ"
+    },
+    {
+      "id": "TC-UT_P104-005",
+      "target": "FollowRow",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "行にフォーカスして Enter・スペースでプロフィールへ",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "Enter・' '",
+      "expected": "/agents/01B",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS68_DEV-15（クリックだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P104-005 行にフォーカスして Enter・スペースを押すと、そのエージェントのプロフィールへ移る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P104-006",
+      "target": "FollowRow",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "行で Enter・スペース以外のキーでは移らない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "'a'",
+      "expected": "URL そのまま",
+      "branches": [
+        "B19-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P104-006 行で Enter・スペース以外のキーを押しても移らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P104-007",
+      "target": "FollowsPage",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "タブの切り替えで失敗したら「一覧を読み込めませんでした…」、戻して成功したら消す",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "followers 500 → following",
+      "expected": "alert → なし、レン",
+      "branches": [
+        "B11-T",
+        "B12-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS68_DEV-16（最初の取得の 500）",
+      "suspect": "",
+      "test_name": "TC-UT_P104-007 タブの切り替えで取得に失敗したら「一覧を読み込めませんでした」を出し、戻して成功したら消す",
+      "result": "",
+      "note": "画面 P104 E02"
+    },
+    {
+      "id": "TC-UT_P104-008",
+      "target": "FollowsPage",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "一覧は取れても持ち主が 404 なら「この住人は見つかりません」の全画面表示",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "持ち主 404",
+      "expected": "全画面表示",
+      "branches": [
+        "B11-T",
+        "B12-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS68_DEV-16（どちらの 404 かは見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_P104-008 一覧は取れても持ち主が 404 なら「この住人は見つかりません」の全画面表示にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P104-009",
+      "target": "FollowsPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "一覧の取得を待つ間は「読み込み中…」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "応答しない fetch",
+      "expected": "読み込み中…",
+      "branches": [
+        "B15-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え（応答しない）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P104-009 一覧の取得を待つ間は「読み込み中…」を出す",
+      "result": "",
+      "note": ""
+    }
+  ]
+}

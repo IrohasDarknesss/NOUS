@@ -1,0 +1,873 @@
+{
+  "ticket": "NOUS-106",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "タイムラインとスレッド（P101 TimelinePage・NewPostsNotice、P102 ThreadPage・thread/*）",
+  "targets": [
+    "apps/observer/src/pages/TimelinePage.tsx",
+    "apps/observer/src/pages/timeline/NewPostsNotice.tsx",
+    "apps/observer/src/pages/ThreadPage.tsx",
+    "apps/observer/src/pages/thread/ThreadNodeView.tsx",
+    "apps/observer/src/pages/thread/ShowMoreReplies.tsx",
+    "apps/observer/src/pages/thread/HiddenPostNotice.tsx"
+  ],
+  "dependencies": [
+    "TanStack Query",
+    "react-router-dom（MemoryRouter）",
+    "fetch",
+    "sessionStorage・window.scrollTo・Element.scrollIntoView",
+    "window.history.state",
+    "vi.useFakeTimers（ポーリング）",
+    "共通の準備は apps/observer/src/test/observerUt.tsx（このチケットで新しく作った、単体テストだけが使う補助）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 observer 4章・5章・6章",
+    "画面 P101（H06・H16・H17、E01〜E06、様式②）、P102（H06・H12〜H16、E01〜E05）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "TimelinePage：成功していないか、もう戻した（スクロールを戻さない）",
+      "location": "TimelinePage.tsx:33"
+    },
+    {
+      "id": "B2",
+      "condition": "TimelinePage：エラーが無い",
+      "location": "TimelinePage.tsx:39"
+    },
+    {
+      "id": "B3",
+      "condition": "TimelinePage：続きの取得の失敗",
+      "location": "TimelinePage.tsx:40"
+    },
+    {
+      "id": "B4",
+      "condition": "TimelinePage：新しい投稿の取得の失敗が 3 回以上",
+      "location": "TimelinePage.tsx:54"
+    },
+    {
+      "id": "B5",
+      "condition": "TimelinePage：その失敗のエラーがある",
+      "location": "TimelinePage.tsx:56"
+    },
+    {
+      "id": "B6",
+      "condition": "TimelinePage：失敗が 0 に戻り、ポーリングのバナーを出していた",
+      "location": "TimelinePage.tsx:61"
+    },
+    {
+      "id": "B7",
+      "condition": "TimelinePage：成功して 0 件",
+      "location": "TimelinePage.tsx:75"
+    },
+    {
+      "id": "B8",
+      "condition": "TimelinePage：続きがある",
+      "location": "TimelinePage.tsx:84"
+    },
+    {
+      "id": "B9",
+      "condition": "NewPostsNotice：件数が 0 以下",
+      "location": "NewPostsNotice.tsx:10"
+    },
+    {
+      "id": "B10",
+      "condition": "ThreadPage：スレッドが無いか、もうスクロールした",
+      "location": "ThreadPage.tsx:24"
+    },
+    {
+      "id": "B11",
+      "condition": "ThreadPage：エラーが無いか、スレッドがある（初回のバナーを出さない）",
+      "location": "ThreadPage.tsx:31"
+    },
+    {
+      "id": "B12",
+      "condition": "ThreadPage：再取得の失敗が 3 回以上",
+      "location": "ThreadPage.tsx:42"
+    },
+    {
+      "id": "B13",
+      "condition": "ThreadPage：その失敗のエラーがある",
+      "location": "ThreadPage.tsx:44"
+    },
+    {
+      "id": "B14",
+      "condition": "ThreadPage：失敗が 0 に戻り、ポーリングのバナーを出していた",
+      "location": "ThreadPage.tsx:49"
+    },
+    {
+      "id": "B15",
+      "condition": "ThreadPage：履歴の idx が 1 以上（一つ戻る）",
+      "location": "ThreadPage.tsx:61"
+    },
+    {
+      "id": "B16",
+      "condition": "ThreadPage：スレッドがある",
+      "location": "ThreadPage.tsx:82"
+    },
+    {
+      "id": "B17",
+      "condition": "ThreadNodeView：開いた投稿",
+      "location": "ThreadNodeView.tsx:22"
+    },
+    {
+      "id": "B18",
+      "condition": "ThreadNodeView：新しい返信",
+      "location": "ThreadNodeView.tsx:23"
+    },
+    {
+      "id": "B19",
+      "condition": "ThreadNodeView：深さが 5 を超える（余白を増やさない）",
+      "location": "ThreadNodeView.tsx:24"
+    },
+    {
+      "id": "B20",
+      "condition": "ThreadNodeView：続きを読み込み済み",
+      "location": "ThreadNodeView.tsx:26"
+    },
+    {
+      "id": "B21",
+      "condition": "ThreadNodeView：hidden か agent・body が無い",
+      "location": "ThreadNodeView.tsx:46"
+    },
+    {
+      "id": "B22",
+      "condition": "ThreadNodeView：続きがあり、まだ読み込んでいない",
+      "location": "ThreadNodeView.tsx:29"
+    },
+    {
+      "id": "B23",
+      "condition": "ShowMoreReplies：読み込み中（何もしない）",
+      "location": "ShowMoreReplies.tsx:20"
+    },
+    {
+      "id": "B24",
+      "condition": "ShowMoreReplies：取得の失敗",
+      "location": "ShowMoreReplies.tsx:25"
+    }
+  ],
+  "issues": [
+    "疑い 1：P101 の最初の取得が失敗すると、30 秒ごとの再取得が動かず、一覧もバナーも自動では戻らない。本体の一覧（useInfiniteQuery）に refetchInterval が無く、新しい投稿の取得（since）は先頭の投稿が無いと有効にならないため。設計書 6章・P101 E01 は「次の自動再取得の成功で消去」。TC-UT_P101-010 は設計どおりの期待結果で書いた（実施で NG の見込み）",
+    "疑い 2：P101 で一覧が 0 件のときも、同じ理由で 30 秒ごとの取得をしない。世界が動き出して投稿が増えても、再読み込みまで「新しい投稿 N 件」が出ない。TC-UT_P101-011（実施で NG の見込み）",
+    "疑い 4：P101・P102 の最初の取得の失敗の様式②のバナーは、後の取得が成功しても消えない（ポーリングの失敗のバナーだけを消す作り）。P103・P104 は成功で消している。設計書 6章は「成功で消える」。P102 は TC-UT_P102-013、P101 は TC-UT_P101-010 で確かめる（実施で NG の見込み）",
+    "通せない分岐：B5・B13 の偽（失敗が 3 回以上なのにエラーが無い）は、失敗の数がエラーの更新で増えるため届かない。B23 の真は、読み込み中はボタンが disabled になるため画面からは届かない（TC-UT_P102-008 は disabled で二重の取得が起きないことを確かめる）。ThreadNodeView の onLoaded が無い場合（?? の右）は ThreadPage から必ず渡すため届かない",
+    "確認事項 1：TimelinePage は投稿の ID をエンコードせずに /posts/:postId へ移る（AgentProfilePage はエンコードする）。ULID なので影響は無いが、揃えるかどうか"
+  ],
+  "test_files": [
+    "apps/observer/src/pages/TimelinePage.test.tsx",
+    "apps/observer/src/pages/TimelinePage.ut.test.tsx",
+    "apps/observer/src/pages/timeline/NewPostsNotice.test.tsx",
+    "apps/observer/src/pages/timeline/NewPostsNotice.ut.test.tsx",
+    "apps/observer/src/pages/ThreadPage.test.tsx",
+    "apps/observer/src/pages/ThreadPage.ut.test.tsx"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS67_DEV-03",
+      "target": "NewPostsNotice",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "0 件のときは出ない",
+      "precondition": "なし",
+      "input": "count=0",
+      "expected": "出さない",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-03 0 件のときは出ない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-04",
+      "target": "NewPostsNotice",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "1 件以上でボタン、押すと onClick",
+      "precondition": "なし",
+      "input": "count=1",
+      "expected": "新しい投稿 1 件",
+      "branches": [
+        "B9-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-04 1 件以上のときボタンを出し、押すと onClick を呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-05",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "一覧を描き、nextCursor があればさらに読み込む",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "一覧と nextCursor",
+      "expected": "カードとボタン",
+      "branches": [
+        "B2-T",
+        "B7-F",
+        "B8-T",
+        "B1-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-05 一覧を描画し、nextCursor があれば「さらに読み込む」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-06",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "0 件で「まだ投稿はありません」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "0 件",
+      "expected": "空の表示",
+      "branches": [
+        "B7-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-06 0 件で「まだ投稿はありません」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-07",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "nextCursor が null ならボタンなし",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "nextCursor null",
+      "expected": "ボタンなし",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-07 nextCursor が null なら「さらに読み込む」が出ない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-08",
+      "target": "TimelinePage",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "最初の取得が 500 で様式②の文言",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "500",
+      "expected": "投稿を読み込めませんでした…",
+      "branches": [
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-08 初回の取得が 500 のとき様式②の文言を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-09",
+      "target": "ThreadNodeView / HiddenPostNotice",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "hidden の投稿は「管理者が非表示にした投稿」、子は描く",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "hidden=true",
+      "expected": "非表示の表示、子あり",
+      "branches": [
+        "B21-T",
+        "B16-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、createMemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-09 hidden の投稿が「管理者が非表示にした投稿」になり本文・表示名が出ず、子の返信は描く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-10",
+      "target": "ThreadNodeView",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "focus の投稿に強調の印",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "focusPostId",
+      "expected": "data-focused",
+      "branches": [
+        "B17-T",
+        "B17-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、createMemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-10 focus の投稿に強調の印がある",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-11",
+      "target": "ShowMoreReplies / ThreadPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "moreCount で「続きを表示（N 件）」、押すと差し込む",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "moreCount、クリック",
+      "expected": "子を差し込む",
+      "branches": [
+        "B22-T",
+        "B20-T",
+        "B24-F",
+        "B23-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、createMemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-11 moreCount があると「続きを表示（N 件）」が出て、押すと続きを差し込む",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS67_DEV-12",
+      "target": "ThreadPage",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "404 で「この投稿は見つかりません」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "404",
+      "expected": "全画面表示",
+      "branches": [
+        "B11-F",
+        "B16-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、createMemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-67）",
+      "suspect": "",
+      "test_name": "TC-NOUS67_DEV-12 404 で「この投稿は見つかりません」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P101-001",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "最初の取得に成功したら保存したスクロール位置に一度だけ戻す",
+      "precondition": "保存 420",
+      "input": "表示",
+      "expected": "scrollTo(0, 420) を 1 回",
+      "branches": [
+        "B1-F",
+        "B1-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、window.scrollTo",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P101-001 最初の取得に成功したら、保存したスクロール位置に一度だけ戻す",
+      "result": "",
+      "note": "画面 P102 E04：前のスクロール位置を復元"
+    },
+    {
+      "id": "TC-UT_P101-002",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "投稿カードを押すとスクロール位置を保存して、そのスレッドへ移る",
+      "precondition": "scrollY=300",
+      "input": "カードを押す",
+      "expected": "保存 300、/posts/P9",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P101-002 投稿カードを押すとスクロール位置を保存して、その投稿のスレッドへ移る",
+      "result": "",
+      "note": "画面 P101 E04"
+    },
+    {
+      "id": "TC-UT_P101-003",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "表示名を押すとプロフィールへ移り、スレッドへは移らない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "表示名を押す",
+      "expected": "/agents/01A",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "一部 TC-NOUS49_DEV-19（部品の単体）",
+      "suspect": "",
+      "test_name": "TC-UT_P101-003 表示名を押すとプロフィールへ移り、スレッドへは移らない",
+      "result": "",
+      "note": "画面 P101 E05"
+    },
+    {
+      "id": "TC-UT_P101-004",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "さらに読み込むで cursor 付きで続きを取り末尾に足し、nextCursor が無くなればボタンを隠す",
+      "precondition": "先頭 nextCursor c1",
+      "input": "ボタンを押す",
+      "expected": "/api/timeline?cursor=c1&limit=30、P1 を足す、ボタンなし",
+      "branches": [
+        "B8-T",
+        "B8-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P101-004 さらに読み込むで続きを cursor 付きで取って末尾に足し、nextCursor が無くなればボタンを隠す",
+      "result": "",
+      "note": "画面 P101 E06"
+    },
+    {
+      "id": "TC-UT_P101-005",
+      "target": "TimelinePage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "続きの取得に失敗したら「続きを読み込めませんでした」、ボタンは押せる状態に戻す",
+      "precondition": "先頭 nextCursor c1",
+      "input": "続き 500",
+      "expected": "alert、ボタン enabled",
+      "branches": [
+        "B3-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P101-005 続きの取得に失敗したら「続きを読み込めませんでした」を出し、ボタンは押せる状態に戻す",
+      "result": "",
+      "note": "画面 P101 E06"
+    },
+    {
+      "id": "TC-UT_P101-006",
+      "target": "TimelinePage / NewPostsNotice",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "30 秒ごとの取得で新しい投稿があれば件数を出し、押すと先頭に差し込んで件数を消し、先頭へスクロール",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "30 秒後に P10、通知を押す",
+      "expected": "新しい投稿 1 件 → P10・P9、通知なし、scrollTo(0, 0)",
+      "branches": [
+        "B9-F",
+        "B9-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "一部 TC-NOUS67_DEV-02・04（フックと部品の単体）",
+      "suspect": "",
+      "test_name": "TC-UT_P101-006 30 秒ごとの取得で新しい投稿があれば件数を出し、押すと先頭に差し込んで件数を消し、先頭へスクロールする",
+      "result": "",
+      "note": "画面 P101 E02・E03"
+    },
+    {
+      "id": "TC-UT_P101-007",
+      "target": "TimelinePage",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "新しい投稿の取得が 2 回続けて失敗してもバナーは出さず、3 回で「最新の投稿を取得できていません」",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "since が続けて 500",
+      "expected": "2 回：alert なし、3 回：alert",
+      "branches": [
+        "B4-F",
+        "B4-T",
+        "B5-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P101-007 新しい投稿の取得が 2 回続けて失敗してもバナーは出さず、3 回続けて失敗したら「最新の投稿を取得できていません」を出す",
+      "result": "",
+      "note": "画面 P101 E02"
+    },
+    {
+      "id": "TC-UT_P101-008",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "「最新の投稿を取得できていません」は次の取得に成功したら消す",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "3 回失敗の後に成功",
+      "expected": "alert あり → なし",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P101-008 「最新の投稿を取得できていません」は、次の取得に成功したら消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P101-009",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "画面が隠れている間は 30 秒ごとの取得をしない",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "隠して 90 秒",
+      "expected": "/api/timeline の呼び出しが増えない",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面、visibilityState",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P101-009 画面が隠れている間は 30 秒ごとの取得をしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P101-010",
+      "target": "TimelinePage",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "最初の取得に失敗しても、次の自動の再取得で成功したら一覧を出してバナーを消す",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "先頭 500 → 30 秒後に成功",
+      "expected": "alert（投稿を読み込めませんでした…）→ なし、P9 を出す",
+      "branches": [
+        "B2-F",
+        "B6-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "自動の再取得が動かず、バナーも消えない（疑い 1・4）",
+      "test_name": "TC-UT_P101-010 最初の取得に失敗しても、次の自動の再取得で成功したら一覧を出してバナーを消す",
+      "result": "",
+      "note": "設計書 6章、画面 P101 様式②"
+    },
+    {
+      "id": "TC-UT_P101-011",
+      "target": "TimelinePage",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "0 件のときも 30 秒ごとに取得し、新しい投稿があれば件数を出す",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "0 件 → 30 秒後に P1",
+      "expected": "新しい投稿 1 件",
+      "branches": [
+        "B7-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "0 件では 30 秒ごとの取得をしない（疑い 2）",
+      "test_name": "TC-UT_P101-011 0 件のときも 30 秒ごとに取得し、新しい投稿があれば件数を出す",
+      "result": "",
+      "note": "画面 P101 E02"
+    },
+    {
+      "id": "TC-UT_P101-012",
+      "target": "NewPostsNotice",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "件数が負の値なら通知を出さない",
+      "precondition": "なし",
+      "input": "count=-1",
+      "expected": "ボタンなし",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS67_DEV-03（0 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P101-012 件数が負の値なら通知を出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P102-001",
+      "target": "ThreadPage",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "スレッドを depth=5 で取り、開いた投稿の要素を中央へスクロールする",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "/posts/C1（root R の子）",
+      "expected": "/api/posts/C1/thread?depth=5、C1 の要素で scrollIntoView({ block: center })",
+      "branches": [
+        "B10-F",
+        "B16-T",
+        "B10-T",
+        "B20-F",
+        "B21-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、Element.scrollIntoView",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-001 スレッドを depth=5 で取り、開いた投稿の要素を画面の中央へスクロールする",
+      "result": "",
+      "note": "設計書 4章 scrollToFocus"
+    },
+    {
+      "id": "TC-UT_P102-002",
+      "target": "ThreadPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "「タイムラインへ戻る」は履歴が無ければ / へ",
+      "precondition": "history.state null",
+      "input": "戻るを押す",
+      "expected": "/",
+      "branches": [
+        "B15-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-002 「タイムラインへ戻る」は履歴が無ければ / へ移る",
+      "result": "",
+      "note": "画面 P102 E04"
+    },
+    {
+      "id": "TC-UT_P102-003",
+      "target": "ThreadPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "「タイムラインへ戻る」は履歴があれば一つ前へ",
+      "precondition": "history.state idx=1、前は /agents/01A",
+      "input": "戻るを押す",
+      "expected": "/agents/01A",
+      "branches": [
+        "B15-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout、window.history.state",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-003 「タイムラインへ戻る」は履歴があれば一つ前の画面へ戻る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P102-004",
+      "target": "ThreadPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "スレッドの取得が 500 なら「スレッドを読み込めませんでした」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "500",
+      "expected": "alert",
+      "branches": [
+        "B11-F",
+        "B16-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-004 スレッドの取得が 500 なら「スレッドを読み込めませんでした」を出す",
+      "result": "",
+      "note": "画面 P102 E01"
+    },
+    {
+      "id": "TC-UT_P102-005",
+      "target": "ThreadPage",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "再取得が 2 回続けて失敗してもバナーは出さず、3 回で「最新の返信を取得できていません」、スレッドは残す",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "成功の後に 500 が続く",
+      "expected": "2 回：なし、3 回：alert、本文 R は残る",
+      "branches": [
+        "B11-T",
+        "B12-F",
+        "B12-T",
+        "B13-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-005 再取得が 2 回続けて失敗してもバナーは出さず、3 回続けて失敗したら「最新の返信を取得できていません」を出す",
+      "result": "",
+      "note": "画面 P102 E05"
+    },
+    {
+      "id": "TC-UT_P102-006",
+      "target": "ThreadPage / ThreadNodeView",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "再取得で増えた返信は 1 秒だけ背景を黄色にする",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "30 秒後に C2 が増える",
+      "expected": "C2 は #FEF9C3 → 1 秒後に戻る、C1 は黄色にしない",
+      "branches": [
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-006 再取得で増えた返信は 1 秒だけ背景を黄色にする",
+      "result": "",
+      "note": "画面 P102 E05"
+    },
+    {
+      "id": "TC-UT_P102-007",
+      "target": "ShowMoreReplies",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "「続きを表示」の取得に失敗したら「続きを読み込めませんでした」、ボタンは押せる状態のまま",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "続き 500",
+      "expected": "alert、ボタン enabled",
+      "branches": [
+        "B24-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-007 「続きを表示」の取得に失敗したら「続きを読み込めませんでした」を出し、ボタンは押せる状態のまま残す",
+      "result": "",
+      "note": "画面 P102 E02"
+    },
+    {
+      "id": "TC-UT_P102-008",
+      "target": "ShowMoreReplies",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "読み込み中にもう一度押しても 1 回しか取らない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "続けて 2 回押す（応答を待たせる）",
+      "expected": "from= の呼び出し 1 回、ボタン disabled",
+      "branches": [
+        "B23-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え（続きは応答を保留）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-008 「続きを表示」は読み込み中にもう一度押しても 1 回しか取りに行かない",
+      "result": "",
+      "note": "設計書 3章：二重押しの防止"
+    },
+    {
+      "id": "TC-UT_P102-009",
+      "target": "ShowMoreReplies",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "開いた投稿の ID で、from に省略された投稿の ID と depth=5 を付けて取る",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "C1 の続きを押す",
+      "expected": "/api/posts/C1/thread?depth=5&from=C1、G1 を足す",
+      "branches": [
+        "B22-T",
+        "B20-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "一部 TC-NOUS67_DEV-11（要求の形は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_P102-009 「続きを表示」は開いた投稿の ID で、from に省略された投稿の ID と depth=5 を付けて取る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P102-010",
+      "target": "ThreadNodeView",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "左の余白は 1 段ごとに 16px、5 段より深くても 80px で止める",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "深さ 4・5・6",
+      "expected": "64px・80px・80px",
+      "branches": [
+        "B19-T",
+        "B19-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-010 左の余白は 1 段ごとに 16px 増やし、5 段より深くても 80px で止める",
+      "result": "",
+      "note": "画面 P102 H16（デスクトップ）"
+    },
+    {
+      "id": "TC-UT_P102-011",
+      "target": "ThreadNodeView",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "hidden が false でも agent か body が無い投稿は「管理者が非表示にした投稿」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "agent null・body null",
+      "expected": "非表示の表示",
+      "branches": [
+        "B21-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "一部 TC-NOUS67_DEV-09（hidden=true だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P102-011 hidden が false でも、agent か body が無い投稿は「管理者が非表示にした投稿」にする",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（API は hidden のとき両方 null）"
+    },
+    {
+      "id": "TC-UT_P102-012",
+      "target": "ThreadNodeView",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "「続きを表示」で返信が 0 件なら、ボタンを消して何も足さない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "続き 0 件",
+      "expected": "ボタンなし、投稿 1 件のまま",
+      "branches": [
+        "B20-T",
+        "B22-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-012 「続きを表示」で返信が 0 件だったら、ボタンを消して何も足さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P102-014",
+      "target": "ThreadPage",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "「最新の返信を取得できていません」は次の再取得に成功したら消す",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "3 回失敗の後に成功",
+      "expected": "alert あり → なし",
+      "branches": [
+        "B14-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P102-014 「最新の返信を取得できていません」は、次の再取得に成功したら消す",
+      "result": "",
+      "note": "画面 P102 様式②"
+    },
+    {
+      "id": "TC-UT_P102-013",
+      "target": "ThreadPage",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "最初の取得に失敗しても、次の自動の再取得で成功したらスレッドを出してバナーを消す",
+      "precondition": "vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "input": "500 → 30 秒後に成功",
+      "expected": "alert → なし、本文 R",
+      "branches": [
+        "B14-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "スレッドは出るがバナーが消えない（疑い 4）",
+      "test_name": "TC-UT_P102-013 最初の取得に失敗しても、次の自動の再取得で成功したらスレッドを出してバナーを消す",
+      "result": "",
+      "note": "設計書 6章"
+    }
+  ]
+}

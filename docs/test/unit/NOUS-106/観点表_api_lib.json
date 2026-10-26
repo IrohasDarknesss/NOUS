@@ -1,0 +1,742 @@
+{
+  "ticket": "NOUS-106",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "観察画面の API の呼び出しと共通の関数（api/client・endpoints、lib/worldTime・scrollRestore）",
+  "targets": [
+    "apps/observer/src/api/client.ts",
+    "apps/observer/src/api/endpoints.ts",
+    "apps/observer/src/lib/worldTime.ts",
+    "apps/observer/src/lib/scrollRestore.ts"
+  ],
+  "dependencies": [
+    "fetch",
+    "window.location.replace（navigation.toNotInvited で差し替え）",
+    "sessionStorage",
+    "window.scrollTo",
+    "Intl.DateTimeFormat（Asia/Tokyo）",
+    "共通の準備は apps/observer/src/test/observerUt.tsx（このチケットで新しく作った、単体テストだけが使う補助）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 observer 3章（永続化ステート）・4章 fetchJson・navigateToNotInvited・get*・formatWorldTime・saveTimelineScroll・restoreTimelineScroll・6章",
+    "画面 P101 H05・H11、P106 E02"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "fetchJson：fetch が例外（NetworkError）",
+      "location": "client.ts:45-49"
+    },
+    {
+      "id": "B2",
+      "condition": "fetchJson：status が 401",
+      "location": "client.ts:50"
+    },
+    {
+      "id": "B3",
+      "condition": "fetchJson：2xx 以外（!res.ok）",
+      "location": "client.ts:54"
+    },
+    {
+      "id": "B4",
+      "condition": "isApiErrorBody：オブジェクトで error を持つ",
+      "location": "client.ts:40・56"
+    },
+    {
+      "id": "B5",
+      "condition": "fetchJson：失敗の本文が JSON でない（null にする）",
+      "location": "client.ts:55"
+    },
+    {
+      "id": "B6",
+      "condition": "withQuery：値が undefined でない",
+      "location": "endpoints.ts:22"
+    },
+    {
+      "id": "B7",
+      "condition": "withQuery：クエリ文字列が空でない",
+      "location": "endpoints.ts:25"
+    },
+    {
+      "id": "B8",
+      "condition": "formatWorldTime：負の値を 0 にする（Math.max）",
+      "location": "worldTime.ts:7"
+    },
+    {
+      "id": "B9",
+      "condition": "saveTimelineScroll：setItem が例外",
+      "location": "scrollRestore.ts:5-9"
+    },
+    {
+      "id": "B10",
+      "condition": "restoreTimelineScroll：保存が無い（null）",
+      "location": "scrollRestore.ts:15"
+    },
+    {
+      "id": "B11",
+      "condition": "restoreTimelineScroll：保存した値が有限の数",
+      "location": "scrollRestore.ts:18"
+    },
+    {
+      "id": "B12",
+      "condition": "restoreTimelineScroll：sessionStorage の例外",
+      "location": "scrollRestore.ts:19-21"
+    }
+  ],
+  "issues": [
+    "確認事項 1：navigateToNotInvited（window.location.replace）は jsdom の location を差し替えられないため単体テストでは直接通さない。fetchJson からの呼び出しは navigation.toNotInvited を差し替えて確かめている（TC-NOUS49_DEV-02、TC-UT_OWEB-002）。履歴に残らないことは結合テスト（Playwright）で見る",
+    "実施の手がかり：TC-NOUS49_DEV-08 は fetch の mockResolvedValue で同じ Response を 2 回返すため、2 回目の res.json() が「Body has already been read」で落ちる見込み。テストの書き方の問題として切り分ける（UT では呼ぶたびに新しい Response を作っている）"
+  ],
+  "test_files": [
+    "apps/observer/src/api/client.test.ts",
+    "apps/observer/src/api/client.ut.test.ts",
+    "apps/observer/src/api/endpoints.test.ts",
+    "apps/observer/src/api/endpoints.ut.test.ts",
+    "apps/observer/src/lib/worldTime.test.ts",
+    "apps/observer/src/lib/worldTime.ut.test.ts",
+    "apps/observer/src/lib/scrollRestore.test.ts",
+    "apps/observer/src/lib/scrollRestore.ut.test.ts"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS49_DEV-01",
+      "target": "fetchJson",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "2xx なら JSON を返し、credentials を same-origin にする",
+      "precondition": "なし",
+      "input": "200 の応答",
+      "expected": "本文の JSON",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-01 2xx なら JSON を返し、Cookie を同じオリジンで送る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-02",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "401 なら /not-invited へ移して NotInvitedError",
+      "precondition": "なし",
+      "input": "401",
+      "expected": "NotInvitedError、toNotInvited を呼ぶ",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、navigation.toNotInvited",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-02 401 なら /not-invited へ移して NotInvitedError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-03",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "2xx 以外は本文の error を ApiError にする",
+      "precondition": "なし",
+      "input": "500 と error の本文",
+      "expected": "ApiError（status・code）",
+      "branches": [
+        "B3-T",
+        "B4-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-03 2xx 以外は本文の error を ApiError にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-04",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "本文が JSON でない失敗は code を null",
+      "precondition": "なし",
+      "input": "500 と文字の本文",
+      "expected": "ApiError（code null）",
+      "branches": [
+        "B4-F",
+        "B5-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-04 本文が JSON でない失敗は code を null にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-05",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "通信できなければ NetworkError",
+      "precondition": "なし",
+      "input": "fetch が reject",
+      "expected": "NetworkError",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-05 通信できなければ NetworkError を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-06",
+      "target": "withQuery",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "undefined の項目を付けない",
+      "precondition": "なし",
+      "input": "一部が undefined",
+      "expected": "定義された項目だけ",
+      "branches": [
+        "B6-T",
+        "B6-F",
+        "B7-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-06 withQuery は undefined の項目を付けない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-07",
+      "target": "getTimeline",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "limit と since を付けて呼ぶ",
+      "precondition": "なし",
+      "input": "{ limit, since }",
+      "expected": "クエリ付きの URL",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-07 getTimeline は limit と since を付けて呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-08",
+      "target": "getThread / getFollows",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ID をパスに、条件をクエリに",
+      "precondition": "なし",
+      "input": "postId・agentId・type",
+      "expected": "パスとクエリ",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-08 getThread・getFollows は ID をパスに埋め、条件をクエリにする",
+      "result": "",
+      "note": "実施の手がかり（同じ Response の使い回し）"
+    },
+    {
+      "id": "TC-NOUS49_DEV-09",
+      "target": "formatWorldTime",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "0 秒は第 1 日 00:00",
+      "precondition": "なし",
+      "input": "0",
+      "expected": "第 1 日 00:00",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-09 経過 0 秒は 第 1 日 00:00",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-10",
+      "target": "formatWorldTime",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "86399 秒は第 1 日 23:59",
+      "precondition": "なし",
+      "input": "86399",
+      "expected": "第 1 日 23:59",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-10 経過 86399 秒は 第 1 日 23:59",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-11",
+      "target": "formatWorldTime",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "90061 秒は第 2 日 01:01",
+      "precondition": "なし",
+      "input": "90061",
+      "expected": "第 2 日 01:01",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-11 経過 90061 秒は 第 2 日 01:01",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-12",
+      "target": "formatClockJst",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "UTC を JST の HH:MM に",
+      "precondition": "なし",
+      "input": "05:21Z",
+      "expected": "14:21",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-12 UTC の時刻を JST の HH:MM にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-13",
+      "target": "saveTimelineScroll / restoreTimelineScroll",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "保存した位置に戻してキーを消す",
+      "precondition": "scrollY=420",
+      "input": "保存→復元",
+      "expected": "scrollTo(0, 420)、キーなし",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B11-T",
+        "B12-F"
+      ],
+      "mock": "window.scrollTo",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-13 保存した位置に戻し、キーを消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-14",
+      "target": "restoreTimelineScroll",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "保存が無ければ何もしない",
+      "precondition": "保存なし",
+      "input": "復元",
+      "expected": "scrollTo を呼ばない",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "window.scrollTo",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-14 保存が無ければ何もしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-001",
+      "target": "fetchJson",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "init（method・headers）を引き継ぎ、credentials は same-origin で上書きする",
+      "precondition": "なし",
+      "input": "init={ method: GET, headers, credentials: include }",
+      "expected": "fetch に { method, headers, credentials: same-origin }",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS49_DEV-01（init なし）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-001 fetchJson は init を引き継ぎ、credentials は same-origin で上書きする",
+      "result": "",
+      "note": "設計書 4章：credentials は same-origin"
+    },
+    {
+      "id": "TC-UT_OWEB-002",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "401 のときは本文を読まずに /not-invited へ移す",
+      "precondition": "なし",
+      "input": "401 と error の本文",
+      "expected": "NotInvitedError、toNotInvited 1 回、res.json は呼ばない",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、navigation.toNotInvited、res.json の spy",
+      "dev_ref": "一部 TC-NOUS49_DEV-02（本文を読まないことは見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-002 401 のときは本文を読まずに /not-invited へ移す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-003",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "2xx 以外で本文に error があれば status と code の ApiError にし、/not-invited へは移さない（404・403・400）",
+      "precondition": "なし",
+      "input": "404 POST_NOT_FOUND・403・400",
+      "expected": "ApiError（status・code・message）、toNotInvited を呼ばない",
+      "branches": [
+        "B2-F",
+        "B3-T",
+        "B4-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、navigation.toNotInvited",
+      "dev_ref": "一部 TC-NOUS49_DEV-03（500 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-003 2xx 以外で本文に error があれば、status と code の ApiError にし、/not-invited へは移さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-004",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "2xx 以外で本文が error の形でなければ code は null、message は「HTTP 状態」",
+      "precondition": "なし",
+      "input": "{\"message\":\"x\"}・null・\"oops\"（500）",
+      "expected": "ApiError（500、code null、HTTP 500）",
+      "branches": [
+        "B4-F",
+        "B5-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS49_DEV-04（JSON でない本文だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-004 2xx 以外で本文が error の形でなければ code は null、message は HTTP の状態にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-005",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "2xx でも本文が JSON でなければ JSON の例外のまま投げる",
+      "precondition": "なし",
+      "input": "200 と not json",
+      "expected": "SyntaxError（ApiError・NetworkError にしない）",
+      "branches": [
+        "B3-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-005 2xx でも本文が JSON でなければ、ApiError・NetworkError にせず JSON の例外のまま投げる",
+      "result": "",
+      "note": "設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_OWEB-006",
+      "target": "fetchJson",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "NetworkError は元の例外を cause に持つ",
+      "precondition": "なし",
+      "input": "fetch が TypeError で reject",
+      "expected": "NetworkError、cause は元の TypeError",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS49_DEV-05（型だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-006 NetworkError は元の例外を cause に持つ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-007",
+      "target": "withQuery",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "項目がすべて undefined なら ? を付けない",
+      "precondition": "なし",
+      "input": "{ cursor: undefined, limit: undefined }",
+      "expected": "/api/timeline",
+      "branches": [
+        "B6-F",
+        "B7-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-007 withQuery は項目がすべて undefined なら ? を付けない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-008",
+      "target": "withQuery",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "0 と空文字は値として残す",
+      "precondition": "なし",
+      "input": "{ limit: 0, cursor: '' }",
+      "expected": "/api/timeline?limit=0&cursor=",
+      "branches": [
+        "B6-T",
+        "B7-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-008 withQuery は 0 と空文字は値として残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-009",
+      "target": "getWorld",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "/api/world を呼ぶ",
+      "precondition": "なし",
+      "input": "なし",
+      "expected": "/api/world",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-009 getWorld は /api/world を呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-010",
+      "target": "getTimeline",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "条件なしなら /api/timeline、cursor と limit があればクエリに付ける",
+      "precondition": "なし",
+      "input": "{}・{ cursor: c1, limit: 30 }",
+      "expected": "/api/timeline・/api/timeline?cursor=c1&limit=30",
+      "branches": [
+        "B7-F",
+        "B7-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS49_DEV-07（since だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-010 getTimeline は条件なしなら /api/timeline、cursor と limit があればクエリに付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-011",
+      "target": "getThread",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "postId の / と空白をエンコードし、depth と from を付ける",
+      "precondition": "なし",
+      "input": "'a/b c'、{ depth: 5, from: 01X }",
+      "expected": "/api/posts/a%2Fb%20c/thread?depth=5&from=01X",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS49_DEV-08（エンコードの要る字なし）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-011 getThread は postId の / と空白をエンコードし、depth と from を付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-012",
+      "target": "getAgentProfile / getAgentPosts",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "agentId をエンコードし、過去投稿には cursor と limit を付ける",
+      "precondition": "なし",
+      "input": "'a/b'、{ cursor: c2, limit: 30 }",
+      "expected": "/api/agents/a%2Fb・/api/agents/a%2Fb/posts?cursor=c2&limit=30",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-012 getAgentProfile と getAgentPosts は agentId をエンコードし、過去投稿には cursor と limit を付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-013",
+      "target": "formatWorldTime",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "負の値は 0 に、小数は切り捨てて扱う",
+      "precondition": "なし",
+      "input": "-1・59.9",
+      "expected": "第 1 日 00:00",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-013 formatWorldTime は負の値を 0 に、小数を切り捨てて扱う",
+      "result": "",
+      "note": "設計書に負の値の記載なし。世界内時間は 0 以上なので 0 として扱うのを期待とした"
+    },
+    {
+      "id": "TC-UT_OWEB-014",
+      "target": "formatWorldTime",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "分・時・日の境目で繰り上がる",
+      "precondition": "なし",
+      "input": "59・60・3599・3600・86400",
+      "expected": "00:00・00:01・00:59・01:00・第 2 日 00:00",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS49_DEV-09〜11",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-014 formatWorldTime は分・時・日の境目で繰り上がる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-015",
+      "target": "formatClockJst",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "JST の日付の境目で 23:59 と 00:00 を出す",
+      "precondition": "なし",
+      "input": "14:59Z・15:00Z",
+      "expected": "23:59・00:00（24:00 にしない）",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS49_DEV-12（日中の時刻だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-015 formatClockJst は JST の日付の境目で 23:59 と 00:00 を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-016",
+      "target": "saveTimelineScroll",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "sessionStorage に保存できなくても例外を出さない",
+      "precondition": "setItem が例外",
+      "input": "保存",
+      "expected": "例外なし",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "Storage.prototype.setItem",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-016 sessionStorage に保存できなくても saveTimelineScroll は例外を出さない",
+      "result": "",
+      "note": "設計書 4章：使えなければ何もしない"
+    },
+    {
+      "id": "TC-UT_OWEB-017",
+      "target": "restoreTimelineScroll",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "保存した値が数でなければスクロールせず、キーは消す",
+      "precondition": "保存 'abc'",
+      "input": "復元",
+      "expected": "scrollTo を呼ばない、キーなし",
+      "branches": [
+        "B10-F",
+        "B11-F"
+      ],
+      "mock": "window.scrollTo",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-017 保存した値が数でなければスクロールせず、キーは消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-018",
+      "target": "restoreTimelineScroll",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "sessionStorage を読めなくても例外を出さず、スクロールしない",
+      "precondition": "getItem が例外",
+      "input": "復元",
+      "expected": "例外なし、scrollTo を呼ばない",
+      "branches": [
+        "B12-T"
+      ],
+      "mock": "Storage.prototype.getItem、window.scrollTo",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-018 sessionStorage を読めなくても restoreTimelineScroll は例外を出さず、スクロールしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-019",
+      "target": "restoreTimelineScroll",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "保存した位置が 0 なら (0, 0) へスクロールする",
+      "precondition": "保存 '0'",
+      "input": "復元",
+      "expected": "scrollTo(0, 0)",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "window.scrollTo",
+      "dev_ref": "一部 TC-NOUS49_DEV-13（420 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-019 保存した位置が 0 なら先頭（0, 0）へスクロールする",
+      "result": "",
+      "note": ""
+    }
+  ]
+}

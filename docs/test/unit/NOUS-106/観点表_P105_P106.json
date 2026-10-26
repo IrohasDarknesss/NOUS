@@ -1,0 +1,178 @@
+{
+  "ticket": "NOUS-106",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "サービス説明と閲覧できません（P105 AboutPage、P106 NotInvitedPage）",
+  "targets": [
+    "apps/observer/src/pages/AboutPage.tsx",
+    "apps/observer/src/pages/NotInvitedPage.tsx"
+  ],
+  "dependencies": [
+    "react-router-dom（MemoryRouter）",
+    "fetch（/api/world）",
+    "document.title・document.head",
+    "共通の準備は apps/observer/src/test/observerUt.tsx（このチケットで新しく作った、単体テストだけが使う補助）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 observer 1章・2章",
+    "画面 P105（H01〜H15、E01〜E05）、P106（H01〜H10、E01・E02）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "NotInvitedPage：meta robots が無い（作る）",
+      "location": "NotInvitedPage.tsx:15"
+    },
+    {
+      "id": "B2",
+      "condition": "NotInvitedPage：離れるとき、自分で作った meta なら消す",
+      "location": "NotInvitedPage.tsx:24"
+    },
+    {
+      "id": "B3",
+      "condition": "NotInvitedPage：離れるとき、元の content があれば戻す",
+      "location": "NotInvitedPage.tsx:26"
+    }
+  ],
+  "issues": [
+    "確認事項 1：meta robots が元からあり content 属性が無いときは、離れた後も noindex が残る（B3 の偽。単体テストでは通さない）。index.html に meta robots は無く、影響は小さい",
+    "確認事項 2：P105 の AI であることの説明の枠の背景は、画面設計では #FEF9C3、実装は #EDE9FE（AI の帯と同じ色）。見た目なので単体テストの対象にせず、ST の UI レビューで見る"
+  ],
+  "test_files": [
+    "apps/observer/src/pages/AboutPage.test.tsx",
+    "apps/observer/src/pages/AboutPage.ut.test.tsx",
+    "apps/observer/src/pages/NotInvitedPage.test.tsx",
+    "apps/observer/src/pages/NotInvitedPage.ut.test.tsx"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS68_DEV-17",
+      "target": "AboutPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "見出し・AI 強調枠・3 区画・注意文・タイムラインへ、押すと /",
+      "precondition": "MemoryRouter",
+      "input": "表示・ボタン",
+      "expected": "各文言、/ へ遷移",
+      "branches": [],
+      "mock": "MemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-17 設計書どおりの見出し・AI強調枠・3つの区画・注意文・タイムラインへボタンを表示し、ボタンを押すと / へ遷移する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS68_DEV-18",
+      "target": "NotInvitedPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "見出しと案内・タイトル・noindex、minimal でリンクとフッターなし",
+      "precondition": "MemoryRouter",
+      "input": "表示",
+      "expected": "各項目",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-68）",
+      "suspect": "",
+      "test_name": "TC-NOUS68_DEV-18 見出しと3つの案内文・ページタイトル・meta robots noindex を設定し、minimal レイアウトでリンクとフッターを出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P105-001",
+      "target": "AboutPage / WorldStatusFooter",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "世界の状態の取得に失敗しても本文は出し、フッターに「状態を取得できません」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "/api/world 500",
+      "expected": "状態を取得できません、見出しあり、alert なし",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P105-001 世界の状態の取得に失敗しても本文は出し、フッターに「状態を取得できません」を出す",
+      "result": "",
+      "note": "画面 P105 E01"
+    },
+    {
+      "id": "TC-UT_P105-002",
+      "target": "AboutPage / ObserverHeader",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "ヘッダーのサービス名を押すとタイムラインへ",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "NOUS を押す",
+      "expected": "/",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P105-002 ヘッダーのサービス名を押すとタイムラインへ移る",
+      "result": "",
+      "note": "画面 P105 E03"
+    },
+    {
+      "id": "TC-UT_P105-003",
+      "target": "AboutPage",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "本文は通信せず、呼ぶのは世界の状態だけ",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "表示",
+      "expected": "fetch は /api/world だけ",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P105-003 本文は観察 API を呼ばず、呼ぶのは世界の状態だけにする",
+      "result": "",
+      "note": "画面 P105 E01：本文は固定で通信しない"
+    },
+    {
+      "id": "TC-UT_P106-001",
+      "target": "NotInvitedPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "離れるときにタイトルを戻し、自分で足した meta robots を消す",
+      "precondition": "title=NOUS、meta なし",
+      "input": "表示 → unmount",
+      "expected": "表示中：閲覧できません - NOUS・noindex、後：NOUS・meta なし",
+      "branches": [
+        "B1-T",
+        "B2-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS68_DEV-18（表示中だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P106-001 離れるときにページのタイトルを元に戻し、自分で足した meta robots を消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P106-002",
+      "target": "NotInvitedPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "meta robots が元からあれば表示中は noindex、離れるときに元の値へ戻す",
+      "precondition": "meta robots=index,follow",
+      "input": "表示 → unmount",
+      "expected": "表示中 noindex、後 index,follow、meta は 1 つ",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P106-002 meta robots が元からあれば、表示中は noindex にし、離れるときに元の値へ戻す",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
