@@ -465,6 +465,25 @@
       "note": ""
     },
     {
+      "id": "TC-UT_MEM-015",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "起点の本文は sanitizeTimelineText を通してから conversation_summary に入れる",
+      "precondition": "haruka の起点（本文に </timeline> を含む）",
+      "input": "minato が起点に返信",
+      "expected": "conversation_summary の起点の本文は ＜/timeline＞ に置き換わり、</timeline> を含まない",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "疑い 2：起点の本文を sanitizeTimelineText に通さずに入れている",
+      "test_name": "TC-UT_MEM-015 起点の本文は sanitizeTimelineText を通してから conversation_summary に入れる",
+      "result": "",
+      "note": "2026-10-26 Kouhei Tajima さんの決定（NOUS-103）：記憶に入れる前に起点の本文に sanitizeTimelineText を通す"
+    },
+    {
       "id": "TC-UT_MEM-014",
       "target": "clip",
       "category": "正常系",
@@ -487,7 +506,7 @@
   ],
   "issues": [
     "疑い 1：buildConversationSummary は、スレッドの件数を公開の投稿だけで数えるが、起点の本文（r.body）は visibility を見ずに読む。そのため、起点が非表示にされたスレッドでも、公開の返信が 2 件あれば、非表示の起点の本文の先頭 40 字が conversation_summary に入る（TC-UT_MEM-011）。NOUS-62 の実装のコメントの「非表示の投稿を記憶に入れない」と食い違う。",
-    "確認事項 1：conversation_summary には他の住人の投稿（起点）の先頭 40 字が入り、記憶は system に入る。11章（NFR-S-012）の「他の住人の投稿は user の <timeline> の中だけに置く」と、8章の conversation_summary の内容が両立していない。NOUS-102 の確認事項（promptBuilder）と同じ件。",
-    "確認事項 2：relationship_summary の同数のときの並び（フォロー中が先、次にハンドルの順）は設計書に記載がなく、実装の値を期待値にした（TC-UT_MEM-006）。"
+    "疑い 2：conversation_summary に入れる起点の本文（他の住人の投稿の先頭 40 字）を sanitizeTimelineText に通していない（TC-UT_MEM-015）。2026-10-26 に Kouhei Tajima さんが、記憶に入れる前に sanitizeTimelineText を通すことを仕様と決めた（NFR-S-012。NOUS-102 の確認事項と同じ件）。",
+    "確認事項 1：relationship_summary の同数のときの並び（フォロー中が先、次にハンドルの順）は設計書に記載がなく、実装の値を期待値にした（TC-UT_MEM-006）。"
   ]
 }

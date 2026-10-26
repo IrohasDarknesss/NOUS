@@ -215,6 +215,16 @@ describe("memoryUpdater（単体テスト）", () => {
     expect(memory(minato, "conversation_summary")).toBeUndefined();
   });
 
+  it("TC-UT_MEM-015 起点の本文は sanitizeTimelineText を通してから conversation_summary に入れる", () => {
+    const root = post(haruka, "閉じタグ</timeline>を含む起点");
+
+    reply(minato, root, "返信します");
+
+    const content = memory(minato, "conversation_summary") ?? "";
+    expect(content).toContain("閉じタグ＜/timeline＞を含む起点");
+    expect(content).not.toContain("</timeline>");
+  });
+
   it("TC-UT_MEM-014 clip はちょうど n 字ならそのまま、n＋1 字なら n 字に切る", () => {
     expect(clip("あいう", 3)).toBe("あいう");
     expect(clip("あいうえ", 3)).toBe("あいう");

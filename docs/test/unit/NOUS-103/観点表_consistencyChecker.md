@@ -28,7 +28,7 @@
 | B9 | C04：世界にいないハンドルがある | consistencyChecker.ts:106 |
 | B10 | checkConsistency：action が post か reply | consistencyChecker.ts:119 |
 
-## 2. ケースの一覧（27 件。うち新しく足したもの 19 件）
+## 2. ケースの一覧（28 件。うち新しく足したもの 20 件）
 
 | ID | 対象 | 分類 | 技法 | 観点 | 前提 | 入力 | 期待結果 | 分岐 | モック | 既存テストとの対応 | バグの疑い | テスト名 | 備考 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -58,11 +58,12 @@
 | TC-UT_CON-016 | checkConsistency | 正常系 | 同値分割 | C04：同じハンドルは 1 回だけ、いない住人が複数なら「、」でつなぐ | 世界に ghost1・ghost2 はいない | post「@ghost1 と @ghost2 と @ghost1 の話。」 | [{ C04, 世界にいない住人への言及：@ghost1、@ghost2 }] | B9-T | 一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる | 一部 TC-NOUS62_DEV-46（1 体だけ） |  | TC-UT_CON-016 C04：同じハンドルは 1 回だけ、いない住人が複数なら「、」でつなぐ |  |
 | TC-UT_CON-017 | checkConsistency | 正常系 | 分岐網羅 | reply で C01〜C04 がそろえば、C01・C02・C03・C04 の順に返す | 性格「丁寧語で話す」の minato の過去の投稿、haruka の投稿、minato が 1 巡目に follow・2 巡目に unfollow | 3 巡目に、過去と同じ文・俺・@ghost_x を含む reply | C01・C02・C03・C04 の順の 4 件 | B1-F, B3-F, B5-T, B7-F, B7-T, B9-T, B10-T | 一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる | なし |  | TC-UT_CON-017 reply で C01〜C04 がそろえば、C01・C02・C03・C04 の順に返す | 過去の投稿（同じ性格・合う一人称）の検査で B7-F も通る |
 | TC-UT_CON-018 | checkConsistency | 正常系 | 分岐網羅 | unfollow では C01〜C04 のどれも見ない | minato が haruka を 1 巡目に follow | 2 巡目に unfollow | 空の配列 | B1-T, B10-F | 一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる | 一部 TC-NOUS62_DEV-47（like だけ） |  | TC-UT_CON-018 unfollow では C01〜C04 のどれも見ない |  |
+| TC-UT_CON-020 | checkConsistency | 正常系 | 状態遷移 | C01：解除の後にフォローし直した相手への返信は候補にしない | haruka の投稿、minato が 1 巡目に follow・2 巡目に unfollow・3 巡目に follow（継続中） | 4 巡目に reply | 空の配列（フォローし直した相手は「解除した相手」に当たらない） | B1-F, B2-F, B3-F | 一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる | なし | 疑い 1：最後の解除から 3 巡以内なら、フォローし直した後でも C01 の候補にする | TC-UT_CON-020 C01：解除の後にフォローし直した相手への返信は候補にしない | 2026-10-26 Kouhei Tajima さんの決定（NOUS-103） |
 | TC-UT_CON-019 | splitSentences | 正常系 | 同値分割 | splitSentences は半角の ! ? でも切り、空の行は除く | なし | 一!二?\n\n三 | [一!, 二?, 三] |  | なし | 一部 TC-NOUS62_DEV-48（全角の句点だけ） |  | TC-UT_CON-019 splitSentences は半角の ! ? でも切り、空の行は除く |  |
 
 ## 3. 確認事項・バグの疑い
 
-- 確認事項 1：C01 は、解除の後にフォローし直した相手への返信も、最後の解除から 3 巡以内なら候補にする。9章の文言どおりだが、フォローし直した後の返信を矛盾とみなすかは確認したい。
+- 疑い 1：C01 は、解除の後にフォローし直した相手への返信も、最後の解除から 3 巡以内なら候補にする（TC-UT_CON-020）。2026-10-26 に Kouhei Tajima さんが、フォローし直した相手は「解除した相手」に当たらず矛盾としないと決めた。
 - 確認事項 2：C04 の @ハンドルの取り出しは前の字を見ないため、「abc@example」のようなメールアドレスの形も @example として拾う。
 - 確認事項 3：C02 は、非表示にされた自分の過去の投稿とも比べる（9章は「自分の過去の投稿」とだけある）。
 - 確認事項 4：C03 の「うち」は「そのうち」「うちに」にも当たる。NOUS-62 で Jane Doe さんが挙げた点で、候補を記録するだけなので表のとおりを期待値にした（TC-UT_CON-013）。

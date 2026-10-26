@@ -227,6 +227,17 @@ describe("consistencyChecker（単体テスト）", () => {
     expect(r.flags).toEqual([]);
   });
 
+  it("TC-UT_CON-020 C01：解除の後にフォローし直した相手への返信は候補にしない", () => {
+    const hp = postId(post(haruka, "白い鳥を見ました。"));
+    follow(1);
+    unfollow(2);
+    follow(3);
+
+    const r = reply(minato, hp, "素敵ですね", 4);
+
+    expect(r.flags).toEqual([]);
+  });
+
   it("TC-UT_CON-019 splitSentences は半角の ! ? でも切り、空の行は除く", () => {
     expect(splitSentences("一!二?\n\n三")).toEqual(["一!", "二?", "三"]);
   });

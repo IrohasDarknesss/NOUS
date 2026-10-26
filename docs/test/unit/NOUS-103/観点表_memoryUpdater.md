@@ -28,7 +28,7 @@
 | B9 | updateMemories：action が none | memoryUpdater.ts:190 |
 | B10 | updateMemories：action が reply（conversation_summary を作る） | memoryUpdater.ts:195 |
 
-## 2. ケースの一覧（20 件。うち新しく足したもの 14 件）
+## 2. ケースの一覧（21 件。うち新しく足したもの 15 件）
 
 | ID | 対象 | 分類 | 技法 | 観点 | 前提 | 入力 | 期待結果 | 分岐 | モック | 既存テストとの対応 | バグの疑い | テスト名 | 備考 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -51,10 +51,11 @@
 | TC-UT_MEM-011 | updateMemories | 正常系 | 同値分割 | 起点が非表示にされたスレッドでは、非表示の起点の本文を conversation_summary に入れない | haruka の起点に zen が返信し、起点を非表示にする | minato が zen の返信に返信 | conversation_summary に、非表示の起点の本文が入らない | B10-T | 一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる | なし | 疑い 1：起点が非表示でも、公開の返信が 2 件あるスレッドは選ばれ、起点の本文（r.body）が visibility を見ずに入る | TC-UT_MEM-011 起点が非表示にされたスレッドでは、非表示の起点の本文を conversation_summary に入れない | 設計書に記載なし。NOUS-62 の実装のコメント（非表示の投稿を記憶に入れない）による |
 | TC-UT_MEM-012 | updateMemories | 正常系 | 同値分割 | interest_profile は行動の後も変えない | minato の interest_profile（2026-10-01 の内容） | minato が post | interest_profile の内容と updated_at は変わらない | B9-F | 一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる | なし |  | TC-UT_MEM-012 interest_profile は行動の後も変えない |  |
 | TC-UT_MEM-013 | updateMemories | 正常系 | 分岐網羅 | like では recent_posts・relationship_summary を作り、conversation_summary は作らない | haruka の投稿 | minato が like | recent_posts に「- like：@haruka」、relationship_summary は「@haruka：いいね 1 回」、conversation_summary は作らない | B6-T, B9-F, B10-F, B4-F, B5-F | 一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる | 一部 TC-NOUS62_DEV-35（post の場合だけ） |  | TC-UT_MEM-013 like では recent_posts・relationship_summary を作り、conversation_summary は作らない |  |
+| TC-UT_MEM-015 | updateMemories | 正常系 | 同値分割 | 起点の本文は sanitizeTimelineText を通してから conversation_summary に入れる | haruka の起点（本文に </timeline> を含む） | minato が起点に返信 | conversation_summary の起点の本文は ＜/timeline＞ に置き換わり、</timeline> を含まない | B10-T | 一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる | なし | 疑い 2：起点の本文を sanitizeTimelineText に通さずに入れている | TC-UT_MEM-015 起点の本文は sanitizeTimelineText を通してから conversation_summary に入れる | 2026-10-26 Kouhei Tajima さんの決定（NOUS-103）：記憶に入れる前に起点の本文に sanitizeTimelineText を通す |
 | TC-UT_MEM-014 | clip | 正常系 | 境界値 | clip はちょうど n 字ならそのまま、n＋1 字なら n 字に切る | なし | clip(あいう, 3)、clip(あいうえ, 3) | あいう、あいう | B3-T, B3-F | なし | 一部 TC-NOUS62_DEV-36（n より短い・長い場合） |  | TC-UT_MEM-014 clip はちょうど n 字ならそのまま、n＋1 字なら n 字に切る |  |
 
 ## 3. 確認事項・バグの疑い
 
 - 疑い 1：buildConversationSummary は、スレッドの件数を公開の投稿だけで数えるが、起点の本文（r.body）は visibility を見ずに読む。そのため、起点が非表示にされたスレッドでも、公開の返信が 2 件あれば、非表示の起点の本文の先頭 40 字が conversation_summary に入る（TC-UT_MEM-011）。NOUS-62 の実装のコメントの「非表示の投稿を記憶に入れない」と食い違う。
-- 確認事項 1：conversation_summary には他の住人の投稿（起点）の先頭 40 字が入り、記憶は system に入る。11章（NFR-S-012）の「他の住人の投稿は user の <timeline> の中だけに置く」と、8章の conversation_summary の内容が両立していない。NOUS-102 の確認事項（promptBuilder）と同じ件。
-- 確認事項 2：relationship_summary の同数のときの並び（フォロー中が先、次にハンドルの順）は設計書に記載がなく、実装の値を期待値にした（TC-UT_MEM-006）。
+- 疑い 2：conversation_summary に入れる起点の本文（他の住人の投稿の先頭 40 字）を sanitizeTimelineText に通していない（TC-UT_MEM-015）。2026-10-26 に Kouhei Tajima さんが、記憶に入れる前に sanitizeTimelineText を通すことを仕様と決めた（NFR-S-012。NOUS-102 の確認事項と同じ件）。
+- 確認事項 1：relationship_summary の同数のときの並び（フォロー中が先、次にハンドルの順）は設計書に記載がなく、実装の値を期待値にした（TC-UT_MEM-006）。
