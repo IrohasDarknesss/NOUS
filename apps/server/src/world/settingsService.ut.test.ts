@@ -299,6 +299,30 @@ describe("updateSettings（単体テスト）", () => {
     expect(findWorldSettings(t.db, world.world_id)?.daily_runs_limit).toBe(10);
   });
 
+  it("TC-UT_WLD-066 running で新しい上限を超えたときは、設定の更新と同じ処理の中で running → limit_stopped にする", async () => {
+    const world = seedWorld();
+    addAgent(world.world_id, "alice");
+    deps().worldService.startWorld(ADMIN);
+    setUsage(100, 50);
+    const enterLimitStopped = vi.fn(async () => undefined);
+
+    const res = await updateSettings(
+      t.db,
+      clock,
+      { scheduler, worldService: { enterLimitStopped } },
+      { ...DEFAULT_SETTINGS, dailyRunsLimit: 50 },
+      ADMIN,
+      { generationConfig: CONFIG },
+    );
+
+    expect(res.stateChanged).toBe("running→limit_stopped");
+    expect(findCurrentWorld(t.db)).toMatchObject({
+      state: "limit_stopped",
+      stop_reason: "runs_limit",
+      running_since: null,
+    });
+  });
+
   it.each([["min"], ["max"]] as const)(
     "TC-UT_WLD-053 数値の項目がすべて下限ちょうど・上限ちょうどでも保存できる（%j）",
     async (edge) => {

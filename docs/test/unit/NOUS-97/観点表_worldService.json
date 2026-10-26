@@ -194,7 +194,8 @@
       "expected": "「世界 2026-10-22-2」、次は「-3」",
       "branches": [
         "B2-F",
-        "B3-T"
+        "B3-T",
+        "B3-F"
       ],
       "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
       "dev_ref": "実装時のテスト（NOUS-57）",
@@ -237,6 +238,7 @@
       "input": "admin",
       "expected": "limit_stopped・neurons_limit、running_since null、wake なし",
       "branches": [
+        "B1-F",
         "B8-F",
         "B11-F",
         "B12-F"
@@ -298,7 +300,8 @@
       "branches": [
         "B14-F",
         "B6-T",
-        "B7-F"
+        "B7-F",
+        "B13-F"
       ],
       "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
       "dev_ref": "実装時のテスト（NOUS-57）",
@@ -688,6 +691,7 @@
       "input": "admin",
       "expected": "{ limit_stopped, startedAt 現在 }、stop_reason runs_limit・started_at 現在・running_since null・確定分 0、監査 before preparing / after limit_stopped、wake なし",
       "branches": [
+        "B1-F",
         "B8-F",
         "B11-F",
         "B12-F"

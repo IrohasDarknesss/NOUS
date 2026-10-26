@@ -86,6 +86,19 @@ describe("worldRoutes（単体テスト）", () => {
     expect(t.db.select().from(worlds).all()).toHaveLength(1);
   });
 
+  it("TC-UT_WLD-067 世界がないときに GET /world が同時に2つ届いても、どちらも 200 で、作る世界は1つだけ", async () => {
+    const a = app();
+
+    const [first, second] = await Promise.all([
+      a.request("/admin/api/world", { headers: headers({ csrf: false }) }),
+      a.request("/admin/api/world", { headers: headers({ csrf: false }) }),
+    ]);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(t.db.select().from(worlds).all()).toHaveLength(1);
+  });
+
   it("TC-UT_WLD-056 利用日の行がなければ利用量は 0 で、上限はその世界の world_settings の値を返す", async () => {
     const world = seedWorld();
     t.db

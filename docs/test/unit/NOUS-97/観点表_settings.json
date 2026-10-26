@@ -143,10 +143,10 @@
     }
   ],
   "issues": [
-    "確認事項 1：PUT /settings で running のまま新しい上限を超えたとき、running → limit_stopped は設定の更新とは別のトランザクション（コミットの後の enterLimitStopped）で行う。world.md 6章のトランザクション制御の表は updateSettings を「world_settings の更新、状態の変更、recordAudit」で1つとしている。NOUS-58 の決めたこと 4 として再鑑で認められているため疑いにはしないが、間に巡が始まる余地がある。設計書の表をどちらに合わせるかの確認",
-    "確認事項 2：GET /world・GET /settings は、現在の世界がないとき find と create を別に行う。同時に2回届くと、2回目の createInitialWorld が ux_worlds_current に当たって 500 になりうる（管理者は1人のため影響は小さい）。TC-UT_WLD-055 は順に2回呼んだときだけを見ている",
-    "確認事項 3：countAgentsByState の active・stopped 以外の state（settingsService.ts:185 の偽）、world_settings がないとき（settingsService.ts:212・270、worldRoutes.ts:119）、楽観の確認で 0 行（settingsService.ts:311）、enterLimitStopped の後に limit_stopped でない（settingsService.ts:333）は、CHECK 制約と同期のトランザクションのため単体テストでは起こせない。分岐の一覧からは外した",
-    "確認事項 4：resolveGenerationConfig の既定（config/generation.json を読んでキャッシュする）は、リポジトリのファイルに依存するため単体テストでは見ない。DEV と UT は configureWorldApi か generationConfig の引数で差し替えている"
+    "疑い 1：PUT /settings で running のまま新しい上限を超えたとき、running → limit_stopped を設定の更新とは別のトランザクション（コミットの後の enterLimitStopped）で行っている。world.md 6章のトランザクション制御の表のとおり、設定の更新と同じトランザクションで行うのが仕様（2026-10-26 Kouhei Tajima の判断）。TC-UT_WLD-066 は enterLimitStopped を何もしない差し替えにして、updateSettings だけで limit_stopped になることを期待するので、実施では NG になる見込み",
+    "疑い 2：GET /world・GET /settings は、現在の世界がないとき find と create を別に行う。2回目の createInitialWorld が ux_worlds_current に当たると 500 になりうる。500 は仕様ではない（2026-10-26 Kouhei Tajima の判断）。TC-UT_WLD-067 で同時の2回を見る。ただしハンドラーの find と create は同期の処理で間に await がないため、1つのプロセスの中では割り込まれず、実施では OK になる見込み",
+    "確認事項 1：countAgentsByState の active・stopped 以外の state（settingsService.ts:185 の偽）、world_settings がないとき（settingsService.ts:212・270、worldRoutes.ts:119）、楽観の確認で 0 行（settingsService.ts:311）、enterLimitStopped の後に limit_stopped でない（settingsService.ts:333）は、CHECK 制約と同期のトランザクションのため単体テストでは起こせない。分岐の一覧からは外した",
+    "確認事項 2：resolveGenerationConfig の既定（B18-F、config/generation.json を読んでキャッシュする）は、TC-NOUS58_DEV-19 が configureWorldApi で scheduler だけを渡すため、リポジトリの config/generation.json を読んで通る。2回目の呼び出しでキャッシュを使う側（worldRoutes.ts:72 の ??= の偽）は、テストごとに resetWorldApi で消すため単体テストでは見ない"
   ],
   "cases": [
     {
@@ -515,7 +515,7 @@
       "input": "GET、PUT（既定を変えた値）",
       "expected": "200、設定と見込み、settings.update の監査",
       "branches": [
-        "B18-T",
+        "B18-F",
         "B19-F"
       ],
       "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、createAdminApp（requireAdminSession・requireCsrf を通す）、configureWorldApi で SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）",
@@ -852,6 +852,44 @@
       "test_name": "TC-UT_WLD-054 応答の見込みは、保存した新しい設定で計算する",
       "result": "",
       "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-066",
+      "target": "updateSettings",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "running で新しい上限を超えたときは、設定の更新と同じ処理の中で running → limit_stopped にする",
+      "precondition": "running、実行回数 50。worldService.enterLimitStopped は何もしない差し替え",
+      "input": "dailyRunsLimit 50",
+      "expected": "stateChanged running→limit_stopped、worlds は limit_stopped・runs_limit・running_since null",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit は実物（admin_audit_logs）、enterLimitStopped を vi.fn に差し替え",
+      "dev_ref": "一部 TC-NOUS58_DEV-12（enterLimitStopped の実物を使うため、トランザクションの分かれ目は見ていない）",
+      "suspect": "実装は enterLimitStopped（コミットの後の別トランザクション）に任せるため、差し替えると running のまま。疑い 1",
+      "test_name": "TC-UT_WLD-066 running で新しい上限を超えたときは、設定の更新と同じ処理の中で running → limit_stopped にする",
+      "result": "",
+      "note": "world.md 6章 トランザクション制御の表"
+    },
+    {
+      "id": "TC-UT_WLD-067",
+      "target": "GET /admin/api/world",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "世界がないときに GET が同時に2つ届いても、どちらも 200 で、作る世界は1つだけ",
+      "precondition": "世界なし",
+      "input": "GET を Promise.all で2つ同時に",
+      "expected": "どちらも 200、worlds は 1 行",
+      "branches": [
+        "B21-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、createAdminApp（requireAdminSession・requireCsrf を通す）、configureWorldApi で SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）",
+      "dev_ref": "一部 TC-UT_WLD-055（順に2回だけ）",
+      "suspect": "find と create の間で割り込まれると 2つ目が 500 になりうる。疑い 2",
+      "test_name": "TC-UT_WLD-067 世界がないときに GET /world が同時に2つ届いても、どちらも 200 で、作る世界は1つだけ",
+      "result": "",
+      "note": "1つのプロセスの中では同期の処理のため割り込まれない見込み"
     },
     {
       "id": "TC-UT_WLD-055",
