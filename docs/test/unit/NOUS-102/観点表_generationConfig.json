@@ -1,0 +1,369 @@
+{
+  "title": "行動生成の設定の読み込み（config/generationConfig.ts）",
+  "ticket": "NOUS-102",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/config/generationConfig.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/config/generationConfig.test.ts（実装時、NOUS-48）",
+    "apps/server/src/config/generationConfig.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "ファイルの読み込み（node:fs の readFileSync。テストは一時ディレクトリのファイルを使う）",
+    "Zod"
+  ],
+  "design_refs": [
+    "BE 詳細設計 generation 4章 loadGenerationConfig",
+    "行動生成とプロンプトの設計 3章・4章・9章"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "!result.success（Zod の検証に通らない）",
+      "location": "generationConfig.ts:37"
+    },
+    {
+      "id": "B2",
+      "condition": "issue.path.join(\".\") || \"(root)\"（項目の場所が空＝全体の誤り）",
+      "location": "generationConfig.ts:38"
+    },
+    {
+      "id": "B3",
+      "condition": "readFileSync が例外（ファイルが無い・読めない）",
+      "location": "generationConfig.ts:47-51"
+    },
+    {
+      "id": "B4",
+      "condition": "JSON.parse が例外（JSON として読めない）",
+      "location": "generationConfig.ts:53-57"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS48_DEV-11",
+      "target": "loadGenerationConfig",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "リポジトリの config/generation.json を読める",
+      "precondition": "リポジトリの config/generation.json",
+      "input": "config/generation.json のパス",
+      "expected": "participation[3]=0.6、candidateCount=2、weights.follow=1.5、recentPenalty=0.4、firstPersonRules 3 件",
+      "branches": [
+        "B1-F",
+        "B3-F",
+        "B4-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-11 リポジトリの config/generation.json を読める",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-12",
+      "target": "parseGenerationConfig",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "正しい値はそのまま返す",
+      "precondition": "なし",
+      "input": "設計書 3・4・9章の既定値",
+      "expected": "入力と等しいオブジェクト",
+      "branches": [
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-12 正しい値はそのまま返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-13",
+      "target": "parseGenerationConfig",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "境界値（確率 0 と 1、重み 0、候補の数 2 と 4）は通る",
+      "precondition": "なし",
+      "input": "participation[1]=0・[5]=1、weights.unfollow=0、candidateCount=2・4",
+      "expected": "例外にならない",
+      "branches": [
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-13 境界値（確率 0 と 1、重み 0、候補の数 2 と 4）は通る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-14",
+      "target": "parseGenerationConfig",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "不正な値（確率の範囲外・欠け、重みが負・欠け、候補の数 1・5・2.5、減点 1.5、キーワードが空、知らない項目、項目の欠け）は ConfigError",
+      "precondition": "なし",
+      "input": "12 種類の不正な値（it.each）",
+      "expected": "ConfigError",
+      "branches": [
+        "B1-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-14 不正な値は ConfigError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-15",
+      "target": "loadGenerationConfig",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ファイルが無ければ ConfigError",
+      "precondition": "なし",
+      "input": "存在しないパス",
+      "expected": "ConfigError",
+      "branches": [
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-15 ファイルが無ければ ConfigError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-16",
+      "target": "loadGenerationConfig",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "JSON として読めなければ ConfigError",
+      "precondition": "一時ファイルに \"{ not json\"",
+      "input": "そのパス",
+      "expected": "ConfigError",
+      "branches": [
+        "B3-F",
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-16 JSON として読めなければ ConfigError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-17",
+      "target": "loadGenerationConfig",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "エラーの文言に不正な項目の場所が入る",
+      "precondition": "一時ファイルに candidateCount=9 の JSON",
+      "input": "そのパス",
+      "expected": "文言に candidateCount を含む",
+      "branches": [
+        "B3-F",
+        "B4-F",
+        "B1-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-17 エラーの文言に不正な項目の場所が入る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CFG-001",
+      "target": "parseGenerationConfig",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "減点（recentPenalty）の下限 0 と上限 1 は通る",
+      "precondition": "なし",
+      "input": "recentPenalty=0、recentPenalty=1",
+      "expected": "どちらも例外にならず、値がそのまま返る",
+      "branches": [
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-13 は減点の境界を見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-001 減点の境界値（0 と 1）は通る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CFG-002",
+      "target": "parseGenerationConfig",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "一人称の表（firstPersonRules）は 0 件でも通る（C03 を使わない設定）",
+      "precondition": "なし",
+      "input": "firstPersonRules=[]",
+      "expected": "例外にならず、firstPersonRules は []",
+      "branches": [
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-002 一人称の表は空の配列でも通る",
+      "result": "",
+      "note": "設計書 9章は件数を決めていない。スキーマに min が無いので通るのが実装の値"
+    },
+    {
+      "id": "TC-UT_CFG-003",
+      "target": "parseGenerationConfig",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "DEV-14 に無い無効クラス（減点が負、重みに知らない種類、活動頻度 6、確率・候補の数が文字列、合わない一人称が空、空の文字列、表に知らない項目）は ConfigError",
+      "precondition": "なし",
+      "input": "1 行に無効な値 1 種類ずつ、8 種類（it.each）",
+      "expected": "ConfigError",
+      "branches": [
+        "B1-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS48_DEV-14（減点は上限側、知らない項目は全体だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-003 不正な値は ConfigError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CFG-004",
+      "target": "parseGenerationConfig",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "全体がオブジェクトでないとき、文言の場所が (root) になる",
+      "precondition": "なし",
+      "input": "null、[]、\"config\"（it.each）",
+      "expected": "ConfigError、文言に (root) を含む",
+      "branches": [
+        "B1-T",
+        "B2-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は項目の場所があるものだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-004 全体がオブジェクトでなければ ConfigError で、場所は (root)",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CFG-005",
+      "target": "parseGenerationConfig",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "出どころを省くと文言に config/generation.json が入り、原因（ZodError）を cause に残す",
+      "precondition": "なし",
+      "input": "candidateCount=9、source を省く",
+      "expected": "ConfigError、文言に config/generation.json、cause あり",
+      "branches": [
+        "B1-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-005 出どころを省くと文言に config/generation.json が入り、原因の ZodError を cause に残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CFG-006",
+      "target": "loadGenerationConfig",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "ファイルが無いとき、文言にパスが入り、元の例外を cause に残す",
+      "precondition": "なし",
+      "input": "存在しないパス",
+      "expected": "ConfigError、文言にパス、cause あり",
+      "branches": [
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS48_DEV-15（型だけを見ている）",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-006 ファイルが無いときは、パスを文言に入れ、元の例外を cause に残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CFG-007",
+      "target": "loadGenerationConfig",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "JSON として読めないとき、文言にパスが入り、SyntaxError を cause に残す",
+      "precondition": "一時ファイルに \"{ not json\"",
+      "input": "そのパス",
+      "expected": "ConfigError、文言にパス、cause は SyntaxError",
+      "branches": [
+        "B3-F",
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS48_DEV-16（型だけを見ている）",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-007 JSON として読めないときは、パスを文言に入れ、SyntaxError を cause に残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CFG-008",
+      "target": "loadGenerationConfig",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "空のファイル（0 バイト）は JSON として読めず ConfigError",
+      "precondition": "一時ファイルに空の文字列",
+      "input": "そのパス",
+      "expected": "ConfigError",
+      "branches": [
+        "B3-F",
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-008 空のファイルは JSON として読めず ConfigError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CFG-009",
+      "target": "loadGenerationConfig",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "ファイルの値が不正なとき、文言の出どころがファイルのパスになる",
+      "precondition": "一時ファイルに recentPenalty=2 の JSON",
+      "input": "そのパス",
+      "expected": "ConfigError、文言にパスと recentPenalty を含む",
+      "branches": [
+        "B3-F",
+        "B4-F",
+        "B1-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS48_DEV-17（項目の場所だけを見ている）",
+      "suspect": "",
+      "test_name": "TC-UT_CFG-009 ファイルの値が不正なときは、文言の出どころがファイルのパスになる",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "確認事項 1：設計書は一人称の表（firstPersonRules）の件数を決めていない。0 件の設定は通る（TC-UT_CFG-002）。C03 を止めたいときの設定として使ってよいかを確認したい。",
+    "確認事項 2（決定済み）：weights がすべて 0 の設定も検証を通る。このとき候補の抽選は ['post'] を返す（観点表_gate_candidates_rng の TC-UT_CAND-014）。設定ファイルは開発側が書くため起動時に弾かず、この動きを仕様とする（2026-10-23 NOUS-102 で Kouhei Tajima が決定）。"
+  ]
+}

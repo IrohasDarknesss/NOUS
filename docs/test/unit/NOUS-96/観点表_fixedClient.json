@@ -1,0 +1,1292 @@
+{
+  "title": "LLM のインタフェースと固定応答（llm/llmClient.ts・llm/fixedClient.ts）",
+  "ticket": "NOUS-96",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/llm/llmClient.ts",
+    "apps/server/src/llm/fixedClient.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/llm/llmClient.test.ts（実装時、NOUS-47）",
+    "apps/server/src/llm/fixedClient.test.ts（実装時、NOUS-47・NOUS-76）",
+    "apps/server/src/llm/fixtureScenarios.test.ts（実装時、NOUS-73）",
+    "apps/server/src/llm/llmClient.ut.test.ts（単体テストで追加）",
+    "apps/server/src/llm/fixedClient.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "ファイル（fixtures/llm の読み込み。単体テストは mkdtemp の一時ディレクトリ）",
+    "時計（LlmClock：now・sleep。FakeClock を渡せる）",
+    "AbortSignal（緊急停止の取り消し）",
+    "zod（固定応答の形の検証）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 generation 2章（LlmClient.generate）・4章（fixedGenerate）・6章（エラーと再試行）",
+    "テスト 固定応答シナリオ",
+    "行動生成とプロンプトの設計 12章（固定応答）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "LlmError：options.cause === undefined",
+      "location": "llmClient.ts:54"
+    },
+    {
+      "id": "B2",
+      "condition": "LlmError：options.httpStatus ?? null（未指定・null）",
+      "location": "llmClient.ts:56"
+    },
+    {
+      "id": "B3",
+      "condition": "LlmError：options.detail == null",
+      "location": "llmClient.ts:57"
+    },
+    {
+      "id": "B4",
+      "condition": "ServerError.retryable：httpStatus が 400・401 以外",
+      "location": "llmClient.ts:86"
+    },
+    {
+      "id": "B5",
+      "condition": "createLlmError：case \"timeout\"（偽は他の kind で通る。B6〜B10 も同じ）",
+      "location": "llmClient.ts:113"
+    },
+    {
+      "id": "B6",
+      "condition": "createLlmError：case \"rate_limited\"",
+      "location": "llmClient.ts:115"
+    },
+    {
+      "id": "B7",
+      "condition": "createLlmError：case \"free_tier\"",
+      "location": "llmClient.ts:117"
+    },
+    {
+      "id": "B8",
+      "condition": "createLlmError：case \"server_error\"",
+      "location": "llmClient.ts:119"
+    },
+    {
+      "id": "B9",
+      "condition": "createLlmError：case \"invalid_format\"",
+      "location": "llmClient.ts:121"
+    },
+    {
+      "id": "B10",
+      "condition": "createLlmError：case \"cancelled\"",
+      "location": "llmClient.ts:123"
+    },
+    {
+      "id": "B11",
+      "condition": "fixturePath：シナリオの名前が SCENARIO_PATTERN に合わない",
+      "location": "fixedClient.ts:76"
+    },
+    {
+      "id": "B12",
+      "condition": "fixturePath：ハンドルが HANDLE_PATTERN に合わない",
+      "location": "fixedClient.ts:79"
+    },
+    {
+      "id": "B13",
+      "condition": "fixturePath：巡の番号が整数でない、または 1 未満",
+      "location": "fixedClient.ts:82"
+    },
+    {
+      "id": "B14",
+      "condition": "loadFixture：readFile が例外",
+      "location": "fixedClient.ts:91-98"
+    },
+    {
+      "id": "B15",
+      "condition": "loadFixture：例外の code が ENOENT",
+      "location": "fixedClient.ts:94"
+    },
+    {
+      "id": "B16",
+      "condition": "loadFixture：JSON.parse が例外",
+      "location": "fixedClient.ts:100-104"
+    },
+    {
+      "id": "B17",
+      "condition": "loadFixture：fixtureSchema の検証に失敗",
+      "location": "fixedClient.ts:106"
+    },
+    {
+      "id": "B18",
+      "condition": "generate：呼ぶ前に signal が abort 済み",
+      "location": "fixedClient.ts:121"
+    },
+    {
+      "id": "B19",
+      "condition": "generate：固定応答のファイルがない（fixture === null）",
+      "location": "fixedClient.ts:128"
+    },
+    {
+      "id": "B20",
+      "condition": "generate：delayMs があり 0 より大きい",
+      "location": "fixedClient.ts:139"
+    },
+    {
+      "id": "B21",
+      "condition": "generate：clock.sleep が拒否",
+      "location": "fixedClient.ts:140-148"
+    },
+    {
+      "id": "B22",
+      "condition": "generate：拒否が lib の CancelledError、または signal が abort 済み",
+      "location": "fixedClient.ts:144"
+    },
+    {
+      "id": "B23",
+      "condition": "generate：待ちの後に signal が abort 済み",
+      "location": "fixedClient.ts:150"
+    },
+    {
+      "id": "B24",
+      "condition": "generate：fixture.error がある",
+      "location": "fixedClient.ts:154"
+    },
+    {
+      "id": "B25",
+      "condition": "generate：fixture.text が undefined（?? で none にする）",
+      "location": "fixedClient.ts:163"
+    },
+    {
+      "id": "B26",
+      "condition": "generate：fixture.usage がない（?. と ?? で 0）",
+      "location": "fixedClient.ts:164-166"
+    }
+  ],
+  "issues": [
+    "確認事項 1：B25 の真（text も error もないのに返す）は、fixtureSchema の refine で「text か error のどちらかが必要」と検証済みのため通らない。守りの分岐として扱い、ケースは作らない（偽は TC-UT_LLM-026 などで通る）。",
+    "確認事項 2：ハンドルや巡の番号が不正なときの FixtureError は LlmError ではないため、行動生成（runOpportunity・retryPolicy）の再試行や失敗の記録の対象外になる。実装時のコメントのとおり「試験の準備の誤り」として扱う設計と読み取れるので、バグの疑いではなく確認事項とする（行動生成側の扱いは NOUS-104 の観点で見る）。"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS47_DEV-01",
+      "target": "createLlmError / LlmError の各型",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "createLlmError(kind) が対応する型・kind・再試行の可否を返す（6 種）",
+      "precondition": "なし",
+      "input": "kind = timeout・rate_limited・free_tier・server_error・invalid_format・cancelled、message \"msg\"",
+      "expected": "対応する型。kind・retryable（timeout・rate_limited・server_error だけ真）・name。httpStatus と detail は null",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B3-T",
+        "B5-T",
+        "B5-F",
+        "B6-T",
+        "B6-F",
+        "B7-T",
+        "B7-F",
+        "B8-T",
+        "B8-F",
+        "B9-T",
+        "B9-F",
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-01 createLlmError(%s) が対応する型・kind・再試行の可否を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-02",
+      "target": "ServerError.retryable",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ServerError は 400・401 だけ再試行しない",
+      "precondition": "なし",
+      "input": "httpStatus 400・401・500・503・200",
+      "expected": "400・401 は偽、ほかは真",
+      "branches": [
+        "B4-T",
+        "B4-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-02 ServerError は 400・401 だけ再試行しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-03",
+      "target": "LlmError（constructor）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "detail は 500 字で切り詰め、httpStatus と cause を保つ",
+      "precondition": "なし",
+      "input": "RateLimitedError、httpStatus 429、detail 600 字、cause",
+      "expected": "detail 500 字、httpStatus 429、cause が同じもの",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-03 detail は 500 字で切り詰め、httpStatus と cause を保つ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-04",
+      "target": "isLlmError",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "isLlmError は LlmError だけを真にする",
+      "precondition": "なし",
+      "input": "TimeoutError、Error、\"timeout\"、null",
+      "expected": "TimeoutError だけ真",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-04 isLlmError は LlmError だけを真にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-11",
+      "target": "FixedClient.generate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "text と usage を LlmResult にして返す",
+      "precondition": "fixtures/llm/basic（読むだけ）",
+      "input": "minato・巡 1",
+      "expected": "action post、promptTokens 1420・completionTokens 44・neurons 14.1、httpStatus 200、durationMs 0",
+      "branches": [
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B24-F",
+        "B26-F"
+      ],
+      "mock": "時計の差し替え（sleep を記録して時刻だけ進める）",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-11 text と usage を LlmResult にして返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-12",
+      "target": "FixedClient.generate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "delayMs だけ時計で待ち、durationMs に反映する",
+      "precondition": "fixtures/llm/basic（読むだけ）",
+      "input": "riko・巡 1（delayMs 1500）",
+      "expected": "sleep(1500) を 1 回、durationMs 1500、action like",
+      "branches": [
+        "B20-T",
+        "B21-F",
+        "B23-F",
+        "B24-F"
+      ],
+      "mock": "時計の差し替え（sleep を記録して時刻だけ進める）",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-12 delayMs だけ時計で待ち、durationMs に反映する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-13",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "error を書いたファイルはその失敗を起こす",
+      "precondition": "fixtures/llm/basic（読むだけ）",
+      "input": "zen・巡 1（error rate_limited）",
+      "expected": "RateLimitedError、httpStatus 429、retryable 真",
+      "branches": [
+        "B24-T",
+        "B6-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-13 error を書いたファイルはその失敗を起こす",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-14",
+      "target": "FixedClient.generate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ファイルがなければ none の JSON を返す",
+      "precondition": "fixtures/llm/basic（読むだけ）",
+      "input": "gen・巡 99",
+      "expected": "NONE_RESPONSE_TEXT、トークン・neurons 0、httpStatus 200",
+      "branches": [
+        "B14-T",
+        "B15-T",
+        "B19-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-14 ファイルがなければ none の JSON を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-21",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "error=%s を対応する例外で再現する（4 種）",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "error = timeout・rate_limited・free_tier・server_error",
+      "expected": "対応する型、kind、httpStatus（null・429・429・500）、detail \"fixture:s1/aoi-1\"",
+      "branches": [
+        "B20-F",
+        "B24-T",
+        "B5-T",
+        "B6-T",
+        "B7-T",
+        "B8-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-21 error=%s を対応する例外で再現する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-22",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "delayMs を待ってから error を起こす",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "error server_error、delayMs 8000",
+      "expected": "sleep(8000) の後に ServerError",
+      "branches": [
+        "B20-T",
+        "B21-F",
+        "B23-F",
+        "B24-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-22 delayMs を待ってから error を起こす",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-23",
+      "target": "FixedClient.generate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "囲み付き・不正な形式の text もそのまま返す（AC-L04）",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "text = ```json 囲みの文字列、usage なし",
+      "expected": "text がそのまま。トークン・neurons 0",
+      "branches": [
+        "B24-F",
+        "B26-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-23 囲み付き・不正な形式の text もそのまま返す（AC-L04）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-24",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "delayMs の待ちの間に abort されたら CancelledError",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "text x、delayMs 8000。sleep の中で abort",
+      "expected": "LLM の CancelledError",
+      "branches": [
+        "B20-T",
+        "B21-T",
+        "B22-T"
+      ],
+      "mock": "時計の差し替え（sleep の中で abort し、signal.reason を投げる）",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-24 delayMs の待ちの間に abort されたら CancelledError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-25",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "呼ぶ前に abort 済みなら CancelledError で、ファイルを読まない",
+      "precondition": "なし",
+      "input": "abort 済みの signal、ハンドル \"bad/../x\"",
+      "expected": "CancelledError（ハンドルの検証より先）",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-25 呼ぶ前に abort 済みなら CancelledError で、ファイルを読まない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-26",
+      "target": "FixedClient.generate / loadFixture",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ファイルの形が不正なら FixtureError（JSON でない・text も error もない・error の値が不正・delayMs が負・未知の項目）",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "5 種の不正な本文",
+      "expected": "どれも FixtureError",
+      "branches": [
+        "B16-T",
+        "B17-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-26 ファイルの形が不正なら FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-31",
+      "target": "fixturePath",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "<シナリオ>/<ハンドル>-<巡>.json を組み立てる",
+      "precondition": "なし",
+      "input": "\"fixtures/llm\"、\"basic\"、{ minato, 3 }",
+      "expected": "fixtures/llm/basic/minato-3.json",
+      "branches": [
+        "B11-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-31 <シナリオ>/<ハンドル>-<巡>.json を組み立てる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS47_DEV-32",
+      "target": "fixturePath",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "パスの外へ出る値・不正な値は FixtureError",
+      "precondition": "なし",
+      "input": "handle \"../etc\"・\"ab\"、cycleNo 0・1.5、scenario \"../basic\"",
+      "expected": "どれも FixtureError",
+      "branches": [
+        "B11-T",
+        "B12-T",
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-47）",
+      "suspect": "",
+      "test_name": "TC-NOUS47_DEV-32 パスの外へ出る値・不正な値は FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS76_DEV-04",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "時計が lib の CancelledError で拒否したら、LLM の CancelledError（kind=cancelled）に変換する",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "text x、delayMs 8000。signal は abort しない",
+      "expected": "LLM の CancelledError、kind cancelled、cause は lib の CancelledError",
+      "branches": [
+        "B21-T",
+        "B22-T"
+      ],
+      "mock": "時計の差し替え（sleep が lib の CancelledError を投げる）",
+      "dev_ref": "実装時のテスト（NOUS-76）",
+      "suspect": "",
+      "test_name": "TC-NOUS76_DEV-04 時計が lib の CancelledError で拒否したら、LLM の CancelledError（kind=cancelled）に変換する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS73_DEV-01",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "7 シナリオの scenario.json の種・巡の数・10 体が固定応答シナリオ.md どおり",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-01 $name の scenario.json が種・巡の数・10 体どおり",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-02",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "7 シナリオの全ファイルが loadFixture で読め、ハンドルと巡が範囲の中",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B14-F",
+        "B16-F",
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-02 $name の全ファイルが fixedClient の形で読め、ハンドルと巡が範囲の中",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-03",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "7 シナリオの行動の本文が 140 字以内で、6.1 の組み合わせに合う",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-03 $name の行動の本文は 140 字以内で、6.1 の組み合わせに合う",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-11",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "basic に投稿・返信・いいね・フォロー・解除・何もしない（llm）と失敗が出る",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-11 basic に投稿・返信・いいね・フォロー・解除・何もしない（llm）と失敗が出る",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-12",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "follow10 は奇数の巡でフォロー、偶数の巡で同じ相手を解除する",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-12 follow10 は奇数の巡でフォロー、偶数の巡で同じ相手を解除する",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-13",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "limits は全応答が 1 回 2,000 Neurons",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-13 limits は全応答が 1 回 2,000 Neurons",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-14",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "failures の巡 1 で各失敗・不正な形式・囲み・delayMs 8000 を返す",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B20-T",
+        "B24-T",
+        "B24-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-14 failures の巡 1 で各失敗・不正な形式・囲み・delayMs 8000 を返す",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-15",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "injection の巡 1 に指示の混入とマークアップの本文がある",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-15 injection の巡 1 に指示の混入とマークアップの本文がある",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-16",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "inconsistency に C01〜C04 の材料がそろう",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-16 inconsistency に C01〜C04 の材料がそろう",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-17",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "long_run は 3 日分（216 巡）で、巡ごとに 1 体が投稿する",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-17 long_run は 3 日分（216 巡）で、巡ごとに 1 体が投稿する",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-NOUS73_DEV-18",
+      "target": "loadFixture / FixedClient.generate（fixtures/llm の 7 シナリオ）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ファイルのない組み合わせは none になる",
+      "precondition": "fixtures/llm の 7 シナリオ（読むだけ）",
+      "input": "各シナリオのファイル",
+      "expected": "固定応答シナリオ.md どおり",
+      "branches": [
+        "B15-T",
+        "B19-T"
+      ],
+      "mock": "時計の差し替え（sleep は何もしない）",
+      "dev_ref": "実装時のテスト（NOUS-73）",
+      "suspect": "",
+      "test_name": "TC-NOUS73_DEV-18 ファイルのない組み合わせは none になる",
+      "result": "",
+      "note": "固定応答のデータの確認。fixedClient の分岐は読み込みの経路だけを通る"
+    },
+    {
+      "id": "TC-UT_LLM-001",
+      "target": "LlmError（constructor）",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "detail が 500 字ちょうどなら切らず、501 字なら 500 字に切る",
+      "precondition": "なし",
+      "input": "ServerError、detail \"a\"×500、\"a\"×501",
+      "expected": "500 字はそのまま、501 字は先頭 500 字",
+      "branches": [
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS47_DEV-03（600 字だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-001 detail が 500 字ちょうどなら切らず、501 字なら 500 字に切る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-002",
+      "target": "LlmError（constructor）",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "detail が空文字なら null にせず空文字のまま持つ",
+      "precondition": "なし",
+      "input": "TimeoutError、detail \"\"",
+      "expected": "detail は \"\"",
+      "branches": [
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-002 detail が空文字なら null にせず空文字のまま持つ",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（== null のときだけ null）"
+    },
+    {
+      "id": "TC-UT_LLM-003",
+      "target": "LlmError（constructor）",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "cause を渡さなければ cause を持たず、null を渡せば null を持つ",
+      "precondition": "なし",
+      "input": "options なし、{ cause: null }",
+      "expected": "1 本目は \"cause\" in e が偽、2 本目は e.cause が null",
+      "branches": [
+        "B1-T",
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS47_DEV-03（Error を渡したときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-003 cause を渡さなければ cause を持たず、null を渡せば null を持つ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-004",
+      "target": "ServerError.retryable",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "400・401 の隣の 399・402 は再試行し、httpStatus が null（HTTP を経ない失敗）も再試行する",
+      "precondition": "なし",
+      "input": "httpStatus 399・402・null",
+      "expected": "どれも retryable 真",
+      "branches": [
+        "B2-T",
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS47_DEV-02（400・401・500・503・200）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-004 400・401 の隣の 399・402 は再試行し、httpStatus が null も再試行する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-005",
+      "target": "createLlmError",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "createLlmError は options（httpStatus・detail・cause）をそのまま渡す",
+      "precondition": "なし",
+      "input": "kind server_error、{ httpStatus: 500, detail: \"d\", cause }",
+      "expected": "httpStatus 500、detail \"d\"、cause が同じもの",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F",
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-01 は message だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-005 createLlmError は options（httpStatus・detail・cause）をそのまま渡す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-006",
+      "target": "fixturePath",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "ハンドルは 3 字と 20 字なら受け付ける",
+      "precondition": "なし",
+      "input": "handle \"abc\"・\"a\"×20、scenario \"basic\"、cycleNo 1",
+      "expected": "basic/abc-1.json、basic/aaaa…(20 字)-1.json",
+      "branches": [
+        "B11-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-32 は 2 字の拒否だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-006 ハンドルは 3 字と 20 字なら受け付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-007",
+      "target": "fixturePath",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "ハンドルが 21 字なら FixtureError",
+      "precondition": "なし",
+      "input": "handle \"a\"×21",
+      "expected": "FixtureError",
+      "branches": [
+        "B11-F",
+        "B12-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-007 ハンドルが 21 字なら FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-008",
+      "target": "fixturePath",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "ハンドルにハイフンを含むと FixtureError（ファイル名の区切りと紛れるため）",
+      "precondition": "なし",
+      "input": "handle \"min-ato\"",
+      "expected": "FixtureError",
+      "branches": [
+        "B11-F",
+        "B12-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-008 ハンドルにハイフンを含むと FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-009",
+      "target": "fixturePath",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "シナリオの名前は 1 字・40 字・ハイフン入りなら受け付ける",
+      "precondition": "なし",
+      "input": "scenario \"a\"・\"s\"×40・\"long-run\"",
+      "expected": "どれもパスを返す",
+      "branches": [
+        "B11-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-009 シナリオの名前は 1 字・40 字・ハイフン入りなら受け付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-010",
+      "target": "fixturePath",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "シナリオの名前が空か 41 字なら FixtureError",
+      "precondition": "なし",
+      "input": "scenario \"\"・\"s\"×41",
+      "expected": "どちらも FixtureError",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-32 は \"../basic\" だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-010 シナリオの名前が空か 41 字なら FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-011",
+      "target": "fixturePath",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "巡の番号は 1 なら受け付ける",
+      "precondition": "なし",
+      "input": "cycleNo 1",
+      "expected": "minato-1.json",
+      "branches": [
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-31 は 3）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-011 巡の番号は 1 なら受け付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-012",
+      "target": "fixturePath",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "巡の番号が NaN・Infinity・負なら FixtureError",
+      "precondition": "なし",
+      "input": "cycleNo NaN・Infinity・-1",
+      "expected": "どれも FixtureError",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-32 は 0 と 1.5）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-012 巡の番号が NaN・Infinity・負なら FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-013",
+      "target": "loadFixture",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "ファイルの場所がディレクトリなど、ENOENT 以外で読めなければ FixtureError（null にしない）",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く（s1/aoi-1.json という名前のディレクトリを作る）",
+      "input": "loadFixture(<一時ディレクトリ>/s1/aoi-1.json)",
+      "expected": "FixtureError、cause に元の例外（EISDIR）",
+      "branches": [
+        "B14-T",
+        "B15-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-013 ENOENT 以外で読めなければ FixtureError（null にしない）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-014",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "ハンドルが不正なら FixtureError を投げ、LlmError にはしない",
+      "precondition": "なし",
+      "input": "abort していない signal、handle \"../etc\"",
+      "expected": "FixtureError。isLlmError は偽",
+      "branches": [
+        "B18-F",
+        "B12-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "なし（DEV-32 は fixturePath を直接呼ぶ。DEV-25 は abort が先）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-014 ハンドルが不正なら FixtureError を投げ、LlmError にはしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-015",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "text と error の両方があるファイルは error の失敗を起こす",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"x\", error: \"timeout\" }",
+      "expected": "TimeoutError（text は返さない）",
+      "branches": [
+        "B20-F",
+        "B24-T",
+        "B5-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-015 text と error の両方があるファイルは error の失敗を起こす",
+      "result": "",
+      "note": "設計書（generation 4章 fixedGenerate）の手順 4（error があれば対応する例外）が手順 5 より先"
+    },
+    {
+      "id": "TC-UT_LLM-016",
+      "target": "FixedClient.generate",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "delayMs が 0 なら時計の sleep を呼ばない",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"x\", delayMs: 0 }",
+      "expected": "sleep を呼ばない。durationMs 0",
+      "branches": [
+        "B20-F",
+        "B23-F",
+        "B24-F"
+      ],
+      "mock": "時計の差し替え（sleep の呼び出しを記録）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-016 delayMs が 0 なら時計の sleep を呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-017",
+      "target": "FixedClient.generate",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "delayMs が 1 なら 1 ms だけ sleep する",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"x\", delayMs: 1 }",
+      "expected": "sleep(1) を 1 回。durationMs 1",
+      "branches": [
+        "B20-T",
+        "B21-F",
+        "B23-F"
+      ],
+      "mock": "時計の差し替え（sleep を記録して時刻だけ進める）",
+      "dev_ref": "なし（DEV-12 は 1500）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-017 delayMs が 1 なら 1 ms だけ sleep する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-018",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "時計の sleep が取り消し以外で失敗し、signal も abort されていなければ、その例外をそのまま投げる",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"x\", delayMs: 10 }、abort していない signal",
+      "expected": "sleep が投げた Error（同じもの）。CancelledError にしない",
+      "branches": [
+        "B20-T",
+        "B21-T",
+        "B22-F"
+      ],
+      "mock": "時計の差し替え（sleep が new Error(\"clock broken\") を投げる）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-018 時計の sleep が取り消し以外で失敗し、signal も abort されていなければ、その例外をそのまま投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-019",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "sleep が終わった時点で abort されていたら CancelledError（cause は signal.reason）",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"x\", delayMs: 10 }",
+      "expected": "LLM の CancelledError、cause は abort の理由",
+      "branches": [
+        "B20-T",
+        "B21-F",
+        "B23-T"
+      ],
+      "mock": "時計の差し替え（sleep の中で abort し、正常に返す）",
+      "dev_ref": "なし（DEV-24 は sleep が拒否する場合）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-019 sleep が終わった時点で abort されていたら CancelledError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-020",
+      "target": "FixedClient.generate",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "FakeClock を渡すと、時計を進めるまで応答を返さず、durationMs は進めた時間になる",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く。FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "{ text: \"x\", delayMs: 8000 }",
+      "expected": "advance(7999) までは未解決、advance(1) で解決。durationMs 8000",
+      "branches": [
+        "B20-T",
+        "B21-F",
+        "B23-F",
+        "B24-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z",
+      "dev_ref": "なし（DEV は時計の差し替えで、FakeClock は使っていない）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-020 FakeClock を渡すと、時計を進めるまで応答を返さず、durationMs は進めた時間になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-021",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "依存",
+      "viewpoint": "FakeClock で待っている間に abort したら CancelledError",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く。FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "{ text: \"x\", delayMs: 8000 }、待ちの途中で abort",
+      "expected": "LLM の CancelledError。FakeClock の pendingCount 0",
+      "branches": [
+        "B20-T",
+        "B21-T",
+        "B22-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z",
+      "dev_ref": "一部 TC-NOUS47_DEV-24（差し替えの時計で、FakeClock の取り消しは見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-021 FakeClock で待っている間に abort したら CancelledError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-022",
+      "target": "loadFixture（fixtureSchema）",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "usage の項目が 1 つでも欠けたら FixtureError",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"x\", usage: { prompt_tokens: 1, completion_tokens: 1 } }",
+      "expected": "FixtureError",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-022 usage の項目が 1 つでも欠けたら FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-023",
+      "target": "loadFixture（fixtureSchema）",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "usage のトークンと neurons が 0 なら受け付ける",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"x\", usage: { prompt_tokens: 0, completion_tokens: 0, neurons: 0 } }",
+      "expected": "読める。値は 0",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-023 usage のトークンと neurons が 0 なら受け付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-024",
+      "target": "loadFixture（fixtureSchema）",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "usage のトークンが -1 なら FixtureError",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"x\", usage: { prompt_tokens: -1, completion_tokens: 0, neurons: 0 } }",
+      "expected": "FixtureError",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-024 usage のトークンが -1 なら FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-025",
+      "target": "loadFixture（fixtureSchema）",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "トークン数と delayMs が整数でなければ FixtureError",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "prompt_tokens 1.5、delayMs 1.5",
+      "expected": "どちらも FixtureError",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-26 は delayMs の負だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-025 トークン数と delayMs が整数でなければ FixtureError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_LLM-026",
+      "target": "FixedClient.generate",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "text が空文字なら none にせず空文字を返す",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "{ text: \"\" }",
+      "expected": "text は \"\"、httpStatus 200",
+      "branches": [
+        "B24-F",
+        "B25-F"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-026 text が空文字なら none にせず空文字を返す",
+      "result": "",
+      "note": "空の応答を行動の検証（outputParser）で不正な形式として扱うため、none に置き換えないのが正しい"
+    },
+    {
+      "id": "TC-UT_LLM-027",
+      "target": "FixedClient.generate",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "固定応答の free_tier は再試行せず、rate_limited と server_error は再試行の対象になる",
+      "precondition": "mkdtemp の一時ディレクトリに s1/<ハンドル>-<巡>.json を置く",
+      "input": "error free_tier・rate_limited・server_error・timeout",
+      "expected": "retryable は free_tier だけ偽",
+      "branches": [
+        "B24-T",
+        "B5-T",
+        "B6-T",
+        "B7-T",
+        "B8-T"
+      ],
+      "mock": "時計の差し替え",
+      "dev_ref": "一部 TC-NOUS47_DEV-21（型・kind・httpStatus だけ。retryable は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_LLM-027 固定応答の free_tier は再試行せず、rate_limited と server_error は再試行の対象になる",
+      "result": "",
+      "note": ""
+    }
+  ]
+}

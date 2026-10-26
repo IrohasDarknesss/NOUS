@@ -1,0 +1,644 @@
+{
+  "title": "記憶との矛盾の検査 C01〜C04（generation/consistencyChecker.ts）",
+  "ticket": "NOUS-103",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/generation/consistencyChecker.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/generation/consistencyChecker.test.ts（実装時、NOUS-62）",
+    "apps/server/src/generation/consistencyChecker.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "一時 DB（createTestDb）。前提のデータは generationSeed と applyAction（commitAction と同じ順で、反映してから検査する）",
+    "config はテストの中で config/generation.json と同じ表を渡す",
+    "巡の番号は seedEvent の cycleNo、世界内時間は巡×10 秒"
+  ],
+  "design_refs": [
+    "行動生成とプロンプトの設計 9章",
+    "BE 詳細設計 generation 4章 checkConsistency",
+    "config/generation.json（firstPersonRules）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "C01：action が reply でない",
+      "location": "consistencyChecker.ts:37"
+    },
+    {
+      "id": "B2",
+      "condition": "C01：返信の相手を自分が解除した行がない（row === undefined）",
+      "location": "consistencyChecker.ts:49"
+    },
+    {
+      "id": "B3",
+      "condition": "C01：今の巡 − 解除した巡 > 3",
+      "location": "consistencyChecker.ts:49"
+    },
+    {
+      "id": "B4",
+      "condition": "C02：文が 20 字未満",
+      "location": "consistencyChecker.ts:64"
+    },
+    {
+      "id": "B5",
+      "condition": "C02：同じ文を含む過去の自分の投稿がある",
+      "location": "consistencyChecker.ts:73"
+    },
+    {
+      "id": "B6",
+      "condition": "C03：性格の記述に、規則のキーワードがない",
+      "location": "consistencyChecker.ts:85"
+    },
+    {
+      "id": "B7",
+      "condition": "C03：合わない一人称が本文にある",
+      "location": "consistencyChecker.ts:89"
+    },
+    {
+      "id": "B8",
+      "condition": "C04：本文に @ハンドルがない",
+      "location": "consistencyChecker.ts:99"
+    },
+    {
+      "id": "B9",
+      "condition": "C04：世界にいないハンドルがある",
+      "location": "consistencyChecker.ts:106"
+    },
+    {
+      "id": "B10",
+      "condition": "checkConsistency：action が post か reply",
+      "location": "consistencyChecker.ts:119"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS62_DEV-41",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "問題のない投稿は空の配列",
+      "precondition": "世界・minato・haruka",
+      "input": "post「今日は晴れています。」",
+      "expected": "空の配列",
+      "branches": [
+        "B1-T",
+        "B4-T",
+        "B6-T",
+        "B8-T",
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-41 問題のない投稿は空の配列",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-42",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "C01：解除から 3 巡以内の返信は候補、4 巡後は候補にしない",
+      "precondition": "haruka の投稿、minato が 1 巡目に follow・2 巡目に unfollow",
+      "input": "5 巡目と 6 巡目に reply",
+      "expected": "5 巡目は C01（@haruka を含む）、6 巡目は空",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F",
+        "B3-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-42 C01：解除から 3 巡以内の返信は候補、4 巡後は候補にしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-43",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "C02：過去の自分の投稿と同じ 20 字以上の文は候補、今回の投稿自身とは比べない",
+      "precondition": "minato の過去の投稿（24 字の文）",
+      "input": "同じ文を含む post、短い文の post を 2 回",
+      "expected": "C02 が 1 件、20 字未満の一致は空",
+      "branches": [
+        "B4-F",
+        "B4-T",
+        "B5-T",
+        "B5-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-43 C02：過去の自分の投稿と同じ 20 字以上の文は候補、今回の投稿自身とは比べない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-44",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "C02：他のエージェントの投稿との一致は数えない",
+      "precondition": "haruka の投稿（同じ文）",
+      "input": "minato が同じ文を post",
+      "expected": "空の配列",
+      "branches": [
+        "B5-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-44 C02：他のエージェントの投稿との一致は数えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-45",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "C03：性格に「丁寧語」とあり本文に「俺」があれば候補、キーワードのない人格は検査しない",
+      "precondition": "性格「丁寧語で話す、几帳面」と「明るい」",
+      "input": "「俺は今日も走ったぜ。」",
+      "expected": "前者は C03（俺を含む）、後者は空",
+      "branches": [
+        "B6-F",
+        "B6-T",
+        "B7-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-45 C03：性格に「丁寧語」とあり本文に「俺」があれば候補、キーワードのない人格は検査しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-46",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "C04：世界にいない @ハンドルは候補、いる住人への言及は候補にしない",
+      "precondition": "世界に haruka がいる",
+      "input": "「@haruka さんと @nobody_here さんに聞きたい。」",
+      "expected": "C04（@nobody_here だけ）",
+      "branches": [
+        "B8-F",
+        "B9-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-46 C04：世界にいない @ハンドルは候補、いる住人への言及は候補にしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-47",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "like・follow などの本文のない行動は C02〜C04 を見ない",
+      "precondition": "haruka の投稿",
+      "input": "minato が like",
+      "expected": "空の配列",
+      "branches": [
+        "B1-T",
+        "B10-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-47 like・follow などの本文のない行動は C02〜C04 を見ない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-48",
+      "target": "splitSentences",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "splitSentences は句点と改行で分ける",
+      "precondition": "なし",
+      "input": "一。二！三？\\n四",
+      "expected": "[一。, 二！, 三？, 四]",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-48 splitSentences は句点と改行で分ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-001",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "C01：解除と同じ巡（差 0）の返信は候補にする",
+      "precondition": "haruka の投稿、minato が 1 巡目に follow・3 巡目に unfollow",
+      "input": "3 巡目に reply",
+      "expected": "C01（巡の差 0）",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-42（差 3 と 4 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CON-001 C01：解除と同じ巡（差 0）の返信は候補にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-002",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "C01：フォローしたことのない相手への返信は候補にしない",
+      "precondition": "haruka の投稿、フォローしたことはない",
+      "input": "2 巡目に reply",
+      "expected": "空の配列",
+      "branches": [
+        "B1-F",
+        "B2-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-002 C01：フォローしたことのない相手への返信は候補にしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-003",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C01：フォローを続けている相手への返信は候補にしない",
+      "precondition": "haruka の投稿、minato が 1 巡目に follow（継続中）",
+      "input": "2 巡目に reply",
+      "expected": "空の配列",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-003 C01：フォローを続けている相手への返信は候補にしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-004",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C01：2 回解除していれば、新しいほうの解除の巡から数える",
+      "precondition": "minato が haruka を 1 巡目に follow・unfollow、2 巡目に follow・5 巡目に unfollow",
+      "input": "8 巡目に reply",
+      "expected": "C01（detail に「5 巡目」）。古い解除（1 巡目）から数えると 7 巡で候補にならない",
+      "branches": [
+        "B3-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-004 C01：2 回解除していれば、新しいほうの解除の巡から数える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-005",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "C02：ちょうど 20 字の文が過去の自分の投稿と一致すれば候補にする",
+      "precondition": "minato の過去の投稿「あ×19。」（20 字）",
+      "input": "post「前置きです。あ×19。」",
+      "expected": "C02 が 1 件（detail に文を含む）",
+      "branches": [
+        "B4-F",
+        "B5-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-43（24 字の文）",
+      "suspect": "",
+      "test_name": "TC-UT_CON-005 C02：ちょうど 20 字の文が過去の自分の投稿と一致すれば候補にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-006",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "C02：19 字の文の一致は候補にしない",
+      "precondition": "minato の過去の投稿「あ×18。」（19 字）",
+      "input": "post「前置きです。あ×18。」",
+      "expected": "空の配列",
+      "branches": [
+        "B4-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-43（5 字の文）",
+      "suspect": "",
+      "test_name": "TC-UT_CON-006 C02：19 字の文の一致は候補にしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-007",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C02：同じ文が本文に 2 回あっても候補は 1 件",
+      "precondition": "minato の過去の投稿（22 字の文）",
+      "input": "同じ文を 2 回つなげた post",
+      "expected": "C02 が 1 件",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-007 C02：同じ文が本文に 2 回あっても候補は 1 件",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-008",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C02：2 つの文がそれぞれ過去の投稿と一致すれば候補は 2 件",
+      "precondition": "minato の過去の投稿 2 件（別の文）",
+      "input": "2 つの文をつなげた post",
+      "expected": "C02 が 2 件",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-008 C02：2 つの文がそれぞれ過去の投稿と一致すれば候補は 2 件",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-009",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C03：性格に「です・ます」とあり、本文に「あたし」があれば候補にする",
+      "precondition": "性格「です・ます調で話す」",
+      "input": "post「あたしは元気です。」",
+      "expected": "C03（detail に「です・ます」）",
+      "branches": [
+        "B6-F",
+        "B7-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-45（丁寧語と俺だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CON-009 C03：性格に「です・ます」とあり、本文に「あたし」があれば候補にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-010",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C03：性格に「無口」とあり、本文に「わたくし」があれば候補にする",
+      "precondition": "性格「無口な職人」",
+      "input": "post「わたくしが参ります。」",
+      "expected": "C03",
+      "branches": [
+        "B6-F",
+        "B7-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-010 C03：性格に「無口」とあり、本文に「わたくし」があれば候補にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-011",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "C03：2 つの規則のキーワードに当たれば、規則ごとに 1 件ずつ候補にする",
+      "precondition": "性格「丁寧語を使うが無口」",
+      "input": "post「俺はわたくしとは言わない。」",
+      "expected": "C03 が 2 件（規則ごと）",
+      "branches": [
+        "B6-F",
+        "B7-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-011 C03：2 つの規則のキーワードに当たれば、規則ごとに 1 件ずつ候補にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-012",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C03：合わない一人称が本文に複数あれば、1 件にまとめて並べる",
+      "precondition": "性格「丁寧語で話す」",
+      "input": "post「俺もオレも走る。」",
+      "expected": "[{ C03, 性格に「丁寧語」とあるが、本文に「俺」「オレ」がある }]",
+      "branches": [
+        "B7-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-012 C03：合わない一人称が本文に複数あれば、1 件にまとめて並べる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-013",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C03：「そのうち」も表の「うち」に当たる（表のとおり候補にする）",
+      "precondition": "性格「丁寧語で話す」",
+      "input": "post「そのうち行きます。」",
+      "expected": "C03（detail に「うち」）",
+      "branches": [
+        "B7-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-013 C03：「そのうち」も表の「うち」に当たる（表のとおり候補にする）",
+      "result": "",
+      "note": "確認事項 4 を参照"
+    },
+    {
+      "id": "TC-UT_CON-014",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C04：停止中でも同じ世界にいる住人への言及は候補にしない",
+      "precondition": "同じ世界に停止中の sleepy",
+      "input": "post「@sleepy さんは元気かな。」",
+      "expected": "空の配列",
+      "branches": [
+        "B8-F",
+        "B9-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-014 C04：停止中でも同じ世界にいる住人への言及は候補にしない",
+      "result": "",
+      "note": "9章「生成の時点の同じ世界のエージェント」に停止中を含むと読んだ"
+    },
+    {
+      "id": "TC-UT_CON-015",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C04：別の世界にだけいる住人への言及は候補にする",
+      "precondition": "アーカイブ済みの世界にだけ faraway",
+      "input": "post「@faraway さんに会いたい。」",
+      "expected": "[{ C04, 世界にいない住人への言及：@faraway }]",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる。アーカイブ済みの世界はテストの中で insert する（ux_worlds_current のため）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-015 C04：別の世界にだけいる住人への言及は候補にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-016",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "C04：同じハンドルは 1 回だけ、いない住人が複数なら「、」でつなぐ",
+      "precondition": "世界に ghost1・ghost2 はいない",
+      "input": "post「@ghost1 と @ghost2 と @ghost1 の話。」",
+      "expected": "[{ C04, 世界にいない住人への言及：@ghost1、@ghost2 }]",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-46（1 体だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CON-016 C04：同じハンドルは 1 回だけ、いない住人が複数なら「、」でつなぐ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-017",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "reply で C01〜C04 がそろえば、C01・C02・C03・C04 の順に返す",
+      "precondition": "性格「丁寧語で話す」の minato の過去の投稿、haruka の投稿、minato が 1 巡目に follow・2 巡目に unfollow",
+      "input": "3 巡目に、過去と同じ文・俺・@ghost_x を含む reply",
+      "expected": "C01・C02・C03・C04 の順の 4 件",
+      "branches": [
+        "B1-F",
+        "B3-F",
+        "B5-T",
+        "B7-F",
+        "B7-T",
+        "B9-T",
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CON-017 reply で C01〜C04 がそろえば、C01・C02・C03・C04 の順に返す",
+      "result": "",
+      "note": "過去の投稿（同じ性格・合う一人称）の検査で B7-F も通る"
+    },
+    {
+      "id": "TC-UT_CON-018",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "unfollow では C01〜C04 のどれも見ない",
+      "precondition": "minato が haruka を 1 巡目に follow",
+      "input": "2 巡目に unfollow",
+      "expected": "空の配列",
+      "branches": [
+        "B1-T",
+        "B10-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-47（like だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CON-018 unfollow では C01〜C04 のどれも見ない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CON-020",
+      "target": "checkConsistency",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "C01：解除の後にフォローし直した相手への返信は候補にしない",
+      "precondition": "haruka の投稿、minato が 1 巡目に follow・2 巡目に unfollow・3 巡目に follow（継続中）",
+      "input": "4 巡目に reply",
+      "expected": "空の配列（フォローし直した相手は「解除した相手」に当たらない）",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "疑い 1：最後の解除から 3 巡以内なら、フォローし直した後でも C01 の候補にする",
+      "test_name": "TC-UT_CON-020 C01：解除の後にフォローし直した相手への返信は候補にしない",
+      "result": "",
+      "note": "2026-10-26 Kouhei Tajima さんの決定（NOUS-103）"
+    },
+    {
+      "id": "TC-UT_CON-019",
+      "target": "splitSentences",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "splitSentences は半角の ! ? でも切り、空の行は除く",
+      "precondition": "なし",
+      "input": "一!二?\\n\\n三",
+      "expected": "[一!, 二?, 三]",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-48（全角の句点だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CON-019 splitSentences は半角の ! ? でも切り、空の行は除く",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "疑い 1：C01 は、解除の後にフォローし直した相手への返信も、最後の解除から 3 巡以内なら候補にする（TC-UT_CON-020）。2026-10-26 に Kouhei Tajima さんが、フォローし直した相手は「解除した相手」に当たらず矛盾としないと決めた。",
+    "確認事項 2：C04 の @ハンドルの取り出しは前の字を見ないため、「abc@example」のようなメールアドレスの形も @example として拾う。",
+    "確認事項 3：C02 は、非表示にされた自分の過去の投稿とも比べる（9章は「自分の過去の投稿」とだけある）。",
+    "確認事項 4：C03 の「うち」は「そのうち」「うちに」にも当たる。NOUS-62 で Jane Doe さんが挙げた点で、候補を記録するだけなので表のとおりを期待値にした（TC-UT_CON-013）。",
+    "確認事項 5：checkC01 の row.ended_cycle === null は、JOIN で解除のイベントが必ずあるため通らない。"
+  ]
+}

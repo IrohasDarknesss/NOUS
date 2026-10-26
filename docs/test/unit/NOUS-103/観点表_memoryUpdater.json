@@ -1,0 +1,512 @@
+{
+  "title": "記憶の更新（generation/memoryUpdater.ts）",
+  "ticket": "NOUS-103",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/generation/memoryUpdater.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/generation/memoryUpdater.test.ts（実装時、NOUS-62）",
+    "apps/server/src/generation/memoryUpdater.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "一時 DB（createTestDb）。前提のデータは generationSeed と applyAction（commitAction と同じ順で反映してから更新する）",
+    "時刻は引数の nowIso（2026-10-22T09:00:00.000Z）で固定。世界内時間は行動ごとに 10 秒ずつ進める"
+  ],
+  "design_refs": [
+    "行動生成とプロンプトの設計 8章",
+    "BE 詳細設計 generation 3章 upsertMemory・4章 updateMemories",
+    "NOUS-62 の実装のコメント（非表示の投稿を記憶に入れない）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "joinLines：次の行を足すと上限を超える（break）",
+      "location": "memoryUpdater.ts:35"
+    },
+    {
+      "id": "B2",
+      "condition": "joinLines：2 行目以降（区切りの改行を 1 字数える）",
+      "location": "memoryUpdater.ts:34"
+    },
+    {
+      "id": "B3",
+      "condition": "clip：字数が n 以下",
+      "location": "memoryUpdater.ts:26"
+    },
+    {
+      "id": "B4",
+      "condition": "recent_posts の行：post",
+      "location": "memoryUpdater.ts:76"
+    },
+    {
+      "id": "B5",
+      "condition": "recent_posts の行：reply",
+      "location": "memoryUpdater.ts:78"
+    },
+    {
+      "id": "B6",
+      "condition": "recent_posts の行：like・follow・unfollow（default）",
+      "location": "memoryUpdater.ts:80"
+    },
+    {
+      "id": "B7",
+      "condition": "relationship の並び：回数が同じならフォロー中を先に",
+      "location": "memoryUpdater.ts:130"
+    },
+    {
+      "id": "B8",
+      "condition": "relationship の並び：フォローも同じならハンドルの順",
+      "location": "memoryUpdater.ts:130"
+    },
+    {
+      "id": "B9",
+      "condition": "updateMemories：action が none",
+      "location": "memoryUpdater.ts:190"
+    },
+    {
+      "id": "B10",
+      "condition": "updateMemories：action が reply（conversation_summary を作る）",
+      "location": "memoryUpdater.ts:195"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS62_DEV-31",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "recent_posts に最近の行動（新しい順）と投稿の本文が入る",
+      "precondition": "haruka の投稿",
+      "input": "minato が post・like・follow・reply",
+      "expected": "recent_posts が「最近の行動」4 行（新しい順）と「最近の投稿」2 行",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B2-T",
+        "B4-T",
+        "B5-T",
+        "B6-T",
+        "B9-F",
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-31 recent_posts に最近の行動（新しい順）と投稿の本文が入る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-32",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "recent_posts は行動 5 件・本文 5 件・400 字まで",
+      "precondition": "世界・minato",
+      "input": "minato が 100 字超の post を 8 回",
+      "expected": "400 字以内、post の行は 5 行、最新の 7 番目が入り 2 番目は入らない",
+      "branches": [
+        "B1-T",
+        "B3-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-32 recent_posts は行動 5 件・本文 5 件・400 字まで",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-33",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "relationship_summary は相手ごとの集計を多い順に並べる",
+      "precondition": "haruka・zen・minato の投稿",
+      "input": "minato が follow・reply 2 回・like、haruka が minato に reply",
+      "expected": "minato は「@haruka：フォロー中、返信 2 回、返信を受けた 1 回」「@zen：いいね 1 回」、haruka は「@minato：返信 1 回、返信を受けた 2 回」",
+      "branches": [
+        "B7-F",
+        "B8-F",
+        "B9-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-33 relationship_summary は相手ごとの集計を多い順に並べる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-34",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "conversation_summary は reply のときだけ作り、起点の先頭 40 字と最後の発言者",
+      "precondition": "haruka の 45 字の投稿",
+      "input": "minato の post、reply、haruka の reply、minato の reply",
+      "expected": "post では作らず、reply で「「起×40」最後の発言：@…」",
+      "branches": [
+        "B3-F",
+        "B10-F",
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-34 conversation_summary は reply のときだけ作り、起点の先頭 40 字と最後の発言者",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-35",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "none では記憶を作らない、2 回目の更新は同じ行を上書きする",
+      "precondition": "世界・minato",
+      "input": "none、post、post",
+      "expected": "none では作らず、post の後は recent_posts・relationship_summary の 2 行だけで、上書きされる",
+      "branches": [
+        "B9-T",
+        "B10-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-35 none では記憶を作らない、2 回目の更新は同じ行を上書きする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS62_DEV-36",
+      "target": "clip",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "clip はコードポイントで切る",
+      "precondition": "なし",
+      "input": "clip(😀×3, 2)、clip(abc, 5)",
+      "expected": "😀×2、abc",
+      "branches": [
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-62）",
+      "suspect": "",
+      "test_name": "TC-NOUS62_DEV-36 clip はコードポイントで切る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-001",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "非表示にした自分の投稿は、recent_posts の行動にも本文にも入れない",
+      "precondition": "minato の投稿を非表示にする",
+      "input": "minato が post「公開の投稿」",
+      "expected": "recent_posts に「公開の投稿」は入り、「非表示にされる投稿」は入らない",
+      "branches": [
+        "B4-T",
+        "B5-F",
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-001 非表示にした自分の投稿は、recent_posts の行動にも本文にも入れない",
+      "result": "",
+      "note": "設計書に記載なし。NOUS-62 の実装のコメント（非表示の投稿を記憶に入れない）による"
+    },
+    {
+      "id": "TC-UT_MEM-002",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "unfollow は「- unfollow：@相手」として、follow より新しい行に入る",
+      "precondition": "minato が haruka を follow",
+      "input": "minato が haruka を unfollow",
+      "expected": "recent_posts = 最近の行動：／- unfollow：@haruka／- follow：@haruka／最近の投稿：",
+      "branches": [
+        "B6-T",
+        "B4-F",
+        "B5-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし（DEV に unfollow の行はない）",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-002 unfollow は「- unfollow：@相手」として、follow より新しい行に入る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-003",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "本文の改行と続く空白は、空白 1 つにまとめて 1 行にする",
+      "precondition": "世界・minato",
+      "input": "post「一行目\\n\\n二行目　 三行目」",
+      "expected": "行動の行も本文の行も「一行目 二行目 三行目」（改行・全角を含む空白の続きを 1 つに）",
+      "branches": [
+        "B4-T",
+        "B5-F",
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-003 本文の改行と続く空白は、空白 1 つにまとめて 1 行にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-004",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "行動の行は本文の先頭 30 字で切り、最近の投稿の行は本文をすべて入れる",
+      "precondition": "世界・minato",
+      "input": "post あ×30い×5（35 字）",
+      "expected": "行動の行は「- post：あ×30」、最近の投稿の行は本文 35 字すべて",
+      "branches": [
+        "B3-F",
+        "B4-T",
+        "B5-F",
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-32（行の数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-004 行動の行は本文の先頭 30 字で切り、最近の投稿の行は本文をすべて入れる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-005",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "入りきらない行は途中で切らずに捨てる（残る行はどれも本文の全体）",
+      "precondition": "世界・minato",
+      "input": "124 字の post を 5 回",
+      "expected": "「最近の投稿：」の後の行は 1 行以上あり、どれも本文の全体（途中で切った行がない）",
+      "branches": [
+        "B1-T",
+        "B2-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-32（400 字以内だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-005 入りきらない行は途中で切らずに捨てる（残る行はどれも本文の全体）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-006",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "relationship_summary は回数が同じならフォロー中を先に、次にハンドルの順に並べる",
+      "precondition": "haruka・zen・aki の投稿、minato は zen をフォロー中",
+      "input": "minato が 3 体の投稿にいいね 1 回ずつ",
+      "expected": "@zen：フォロー中、いいね 1 回／@aki：いいね 1 回／@haruka：いいね 1 回",
+      "branches": [
+        "B7-T",
+        "B8-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし（DEV は回数の違う 2 体だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-006 relationship_summary は回数が同じならフォロー中を先に、次にハンドルの順に並べる",
+      "result": "",
+      "note": "同数のときの並びは設計書に記載なし（「回数の多い順」だけ）。実装の値"
+    },
+    {
+      "id": "TC-UT_MEM-007",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "relationship_summary は 6 体以上の相手がいても 5 体までにする",
+      "precondition": "aaa〜fff の 6 体の投稿",
+      "input": "minato が 6 体の投稿にいいね 1 回ずつ",
+      "expected": "@aaa〜@eee の 5 行（fff は入らない）",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-007 relationship_summary は 6 体以上の相手がいても 5 体までにする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-008",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "自分の投稿への自分の返信は、相手ごとの集計に数えない",
+      "precondition": "minato の投稿",
+      "input": "minato が自分の投稿に返信",
+      "expected": "relationship_summary は空文字",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-008 自分の投稿への自分の返信は、相手ごとの集計に数えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-009",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "conversation_summary は 4 つ以上のスレッドに加わっていても、新しい 3 つまで",
+      "precondition": "haruka の起点 4 つ",
+      "input": "minato が 4 つに順に返信",
+      "expected": "conversation_summary は四つ目・三つ目・二つ目の 3 行",
+      "branches": [
+        "B2-T",
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし（DEV は 1 スレッドだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-009 conversation_summary は 4 つ以上のスレッドに加わっていても、新しい 3 つまで",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-010",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "自分が加わっていない、他の住人どうしのスレッドは conversation_summary に入れない",
+      "precondition": "haruka の起点に zen が返信したスレッド、haruka の別の起点",
+      "input": "minato が別の起点に返信",
+      "expected": "conversation_summary は minato が加わったスレッドの 1 行だけ",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-010 自分が加わっていない、他の住人どうしのスレッドは conversation_summary に入れない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-011",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "起点が非表示にされたスレッドでは、非表示の起点の本文を conversation_summary に入れない",
+      "precondition": "haruka の起点に zen が返信し、起点を非表示にする",
+      "input": "minato が zen の返信に返信",
+      "expected": "conversation_summary に、非表示の起点の本文が入らない",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "疑い 1：起点が非表示でも、公開の返信が 2 件あるスレッドは選ばれ、起点の本文（r.body）が visibility を見ずに入る",
+      "test_name": "TC-UT_MEM-011 起点が非表示にされたスレッドでは、非表示の起点の本文を conversation_summary に入れない",
+      "result": "",
+      "note": "設計書に記載なし。NOUS-62 の実装のコメント（非表示の投稿を記憶に入れない）による"
+    },
+    {
+      "id": "TC-UT_MEM-012",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "interest_profile は行動の後も変えない",
+      "precondition": "minato の interest_profile（2026-10-01 の内容）",
+      "input": "minato が post",
+      "expected": "interest_profile の内容と updated_at は変わらない",
+      "branches": [
+        "B9-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-012 interest_profile は行動の後も変えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-013",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "like では recent_posts・relationship_summary を作り、conversation_summary は作らない",
+      "precondition": "haruka の投稿",
+      "input": "minato が like",
+      "expected": "recent_posts に「- like：@haruka」、relationship_summary は「@haruka：いいね 1 回」、conversation_summary は作らない",
+      "branches": [
+        "B6-T",
+        "B9-F",
+        "B10-F",
+        "B4-F",
+        "B5-F"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "一部 TC-NOUS62_DEV-35（post の場合だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-013 like では recent_posts・relationship_summary を作り、conversation_summary は作らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_MEM-015",
+      "target": "updateMemories",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "起点の本文は sanitizeTimelineText を通してから conversation_summary に入れる",
+      "precondition": "haruka の起点（本文に </timeline> を含む）",
+      "input": "minato が起点に返信",
+      "expected": "conversation_summary の起点の本文は ＜/timeline＞ に置き換わり、</timeline> を含まない",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "一時 DB（createTestDb、マイグレーション済み）。generationSeed で世界・エージェント・生成イベントを入れる",
+      "dev_ref": "なし",
+      "suspect": "疑い 2：起点の本文を sanitizeTimelineText に通さずに入れている",
+      "test_name": "TC-UT_MEM-015 起点の本文は sanitizeTimelineText を通してから conversation_summary に入れる",
+      "result": "",
+      "note": "2026-10-26 Kouhei Tajima さんの決定（NOUS-103）：記憶に入れる前に起点の本文に sanitizeTimelineText を通す"
+    },
+    {
+      "id": "TC-UT_MEM-014",
+      "target": "clip",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "clip はちょうど n 字ならそのまま、n＋1 字なら n 字に切る",
+      "precondition": "なし",
+      "input": "clip(あいう, 3)、clip(あいうえ, 3)",
+      "expected": "あいう、あいう",
+      "branches": [
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS62_DEV-36（n より短い・長い場合）",
+      "suspect": "",
+      "test_name": "TC-UT_MEM-014 clip はちょうど n 字ならそのまま、n＋1 字なら n 字に切る",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "疑い 1：buildConversationSummary は、スレッドの件数を公開の投稿だけで数えるが、起点の本文（r.body）は visibility を見ずに読む。そのため、起点が非表示にされたスレッドでも、公開の返信が 2 件あれば、非表示の起点の本文の先頭 40 字が conversation_summary に入る（TC-UT_MEM-011）。NOUS-62 の実装のコメントの「非表示の投稿を記憶に入れない」と食い違う。",
+    "疑い 2：conversation_summary に入れる起点の本文（他の住人の投稿の先頭 40 字）を sanitizeTimelineText に通していない（TC-UT_MEM-015）。2026-10-26 に Kouhei Tajima さんが、記憶に入れる前に sanitizeTimelineText を通すことを仕様と決めた（NFR-S-012。NOUS-102 の確認事項と同じ件）。",
+    "確認事項 1：relationship_summary の同数のときの並び（フォロー中が先、次にハンドルの順）は設計書に記載がなく、実装の値を期待値にした（TC-UT_MEM-006）。"
+  ]
+}

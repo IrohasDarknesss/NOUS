@@ -1,0 +1,1020 @@
+{
+  "title": "参加の判定・候補の抽選・乱数（generation/gate.ts・candidates.ts・rng.ts）",
+  "ticket": "NOUS-102",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/generation/gate.ts",
+    "apps/server/src/generation/candidates.ts",
+    "apps/server/src/generation/rng.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/generation/gate.test.ts（実装時、NOUS-61）",
+    "apps/server/src/generation/candidates.test.ts（実装時、NOUS-61）",
+    "apps/server/src/generation/rng.test.ts（実装時、NOUS-48）",
+    "apps/server/src/generation/gate.ut.test.ts（単体テストで追加）",
+    "apps/server/src/generation/candidates.ut.test.ts（単体テストで追加）",
+    "apps/server/src/generation/rng.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "乱数（createRng。種を固定する。drawCandidates は乱数の関数を引数で受けるので、固定の値を返す関数に差し替える）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 generation 4章 decideParticipation・createRng・drawCandidates・availableActions",
+    "行動生成とプロンプトの設計 3章・4章"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "!Number.isInteger(activityLevel)",
+      "location": "gate.ts:15"
+    },
+    {
+      "id": "B2",
+      "condition": "!(String(activityLevel) in config.participation)",
+      "location": "gate.ts:15"
+    },
+    {
+      "id": "B3",
+      "condition": "rng() < p（参加する）",
+      "location": "gate.ts:27"
+    },
+    {
+      "id": "B4",
+      "condition": "refs.length > 0（reply を加える）",
+      "location": "candidates.ts:27"
+    },
+    {
+      "id": "B5",
+      "condition": "likeable.length > 0（like を加える）",
+      "location": "candidates.ts:28"
+    },
+    {
+      "id": "B6",
+      "condition": "followTargets.length > 0（follow を加える）",
+      "location": "candidates.ts:29"
+    },
+    {
+      "id": "B7",
+      "condition": "followees.length > 0（unfollow を加える）",
+      "location": "candidates.ts:30"
+    },
+    {
+      "id": "B8",
+      "condition": "!available.includes(kind)（選べない種類を飛ばす）",
+      "location": "candidates.ts:42"
+    },
+    {
+      "id": "B9",
+      "condition": "w > 0（重み 0 の種類を抽選から除く）",
+      "location": "candidates.ts:59"
+    },
+    {
+      "id": "B10",
+      "condition": "picked.length < candidateCount && pool.length > 0（抽選を続ける）",
+      "location": "candidates.ts:61"
+    },
+    {
+      "id": "B11",
+      "condition": "r < cumulative（区間に入った。偽のまま終われば末尾の種類）",
+      "location": "candidates.ts:68"
+    },
+    {
+      "id": "B12",
+      "condition": "picked.length > 0（偽なら ['post']）",
+      "location": "candidates.ts:76"
+    },
+    {
+      "id": "B13",
+      "condition": "for (const byte of …)（UTF-8 のバイトが 1 つ以上ある）",
+      "location": "rng.ts:10"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS48_DEV-01",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "同じ種と salt からは同じ乱数列が出る",
+      "precondition": "なし",
+      "input": "同じ種・同じ salt で 2 つ作る",
+      "expected": "列が等しい",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-01 同じ種と salt からは同じ乱数列が出る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-02",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "salt が違えば乱数列が変わる",
+      "precondition": "なし",
+      "input": "同じ種・違う salt",
+      "expected": "列が違う",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-02 salt が違えば乱数列が変わる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-03",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "種が違えば乱数列が変わる",
+      "precondition": "なし",
+      "input": "違う種・同じ salt",
+      "expected": "列が違う",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-03 種が違えば乱数列が変わる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-04",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "値はいつも 0 以上 1 未満",
+      "precondition": "なし",
+      "input": "多数の値",
+      "expected": "0 以上 1 未満",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-04 値はいつも 0 以上 1 未満",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-05",
+      "target": "mulberry32",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "mulberry32 は既知の値を返す（種 1）",
+      "precondition": "なし",
+      "input": "mulberry32(1) の 3 つ",
+      "expected": "既知の 3 つの値",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-05 mulberry32 は既知の値を返す（種 1）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-06",
+      "target": "fnv1a32",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "FNV-1a は既知の値を返す",
+      "precondition": "なし",
+      "input": "\"\"、\"a\"",
+      "expected": "0x811c9dc5、0xe40c292c",
+      "branches": [
+        "B13-T",
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-06 FNV-1a は既知の値を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS48_DEV-07",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "createRng は salt のハッシュと種の XOR を mulberry32 に渡す",
+      "precondition": "なし",
+      "input": "種 12345、salt \"01J0AGENT\"",
+      "expected": "mulberry32((12345 ^ fnv1a32(salt)) >>> 0) と同じ列、既知の値",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-48）",
+      "suspect": "",
+      "test_name": "TC-NOUS48_DEV-07 createRng は salt のハッシュと種の XOR を mulberry32 に渡す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-01",
+      "target": "participationProbability",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "活動頻度に対応する参加の確率を返す",
+      "precondition": "なし",
+      "input": "活動頻度 1〜5",
+      "expected": "0.3、0.45、0.6、0.75、0.9",
+      "branches": [
+        "B1-F",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-01 活動頻度に対応する参加の確率を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-02",
+      "target": "participationProbability",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "活動頻度が 1〜5 の整数でなければ RangeError",
+      "precondition": "なし",
+      "input": "0、6、2.5、NaN（it.each）",
+      "expected": "RangeError",
+      "branches": [
+        "B1-T",
+        "B2-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-02 活動頻度が 1〜5 の整数でなければ RangeError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-03",
+      "target": "decideParticipation",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "同じ種とエージェントなら同じ判定になる",
+      "precondition": "なし",
+      "input": "種 0〜49、同じエージェント",
+      "expected": "2 回の判定が等しい",
+      "branches": [
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-03 同じ種とエージェントなら同じ判定になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-04",
+      "target": "decideParticipation",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "判定は createRng(seed, agent_id) の最初の値 < 確率",
+      "precondition": "なし",
+      "input": "種 0〜49、活動頻度 4",
+      "expected": "createRng の最初の値 < 0.75 と一致",
+      "branches": [
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-04 判定は createRng(seed, agent_id) の最初の値 < 確率",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-05",
+      "target": "decideParticipation",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "確率 0 なら参加せず、確率 1 なら必ず参加する",
+      "precondition": "なし",
+      "input": "確率 0 と 1 の設定、種 0〜99",
+      "expected": "0 は常に false、1 は常に true",
+      "branches": [
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-05 確率 0 なら参加せず、確率 1 なら必ず参加する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-06",
+      "target": "decideParticipation",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "多数の種で、参加の割合が確率に近い",
+      "precondition": "なし",
+      "input": "種 0〜4999、活動頻度 3",
+      "expected": "参加の割合が 0.55〜0.65",
+      "branches": [
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-06 多数の種で、参加の割合が確率に近い",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-11",
+      "target": "availableActions",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "何もなければ post だけ",
+      "precondition": "なし",
+      "input": "すべて空",
+      "expected": "['post']",
+      "branches": [
+        "B4-F",
+        "B5-F",
+        "B6-F",
+        "B7-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-11 何もなければ post だけ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-12",
+      "target": "availableActions",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "条件ごとに reply・like・follow・unfollow が加わる",
+      "precondition": "なし",
+      "input": "それぞれの条件を満たす値",
+      "expected": "条件に応じた種類が加わる",
+      "branches": [
+        "B4-T",
+        "B5-T",
+        "B6-T",
+        "B7-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-12 条件ごとに reply・like・follow・unfollow が加わる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-13",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "既定では候補を 2 つ、重複なしに選ぶ",
+      "precondition": "なし",
+      "input": "種 0〜199、5 種類",
+      "expected": "2 つ、重複なし",
+      "branches": [
+        "B9-T",
+        "B10-T",
+        "B10-F",
+        "B11-T",
+        "B12-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-13 既定では候補を 2 つ、重複なしに選ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-14",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "候補の数は config.candidateCount に従う（2〜4）",
+      "precondition": "なし",
+      "input": "candidateCount 2・3・4",
+      "expected": "その数だけ返す",
+      "branches": [
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-14 候補の数は config.candidateCount に従う（2〜4）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-15",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "選べる種類が候補の数より少なければ、その数だけ返す",
+      "precondition": "なし",
+      "input": "['post']、['post','like'] で候補 4",
+      "expected": "['post']、{post, like}",
+      "branches": [
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-15 選べる種類が候補の数より少なければ、その数だけ返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-16",
+      "target": "drawCandidates",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "選べる種類が無ければ ['post']",
+      "precondition": "なし",
+      "input": "available=[]",
+      "expected": "['post']",
+      "branches": [
+        "B10-F",
+        "B12-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-16 選べる種類が無ければ ['post']",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-17",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "選べない種類は候補に入らない",
+      "precondition": "なし",
+      "input": "['post','reply','like']",
+      "expected": "その 3 種類のどれか",
+      "branches": [
+        "B8-T",
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-17 選べない種類は候補に入らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-18",
+      "target": "candidateWeights",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "直近の行動に含まれるたびに重みを recentPenalty 倍にする",
+      "precondition": "なし",
+      "input": "recent=['post','post']、['like','reply']",
+      "expected": "post 3×0.4×0.4、like 2.5×0.4、reply 3",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-18 直近の行動に含まれるたびに重みを recentPenalty 倍にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-19",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "重みに比例して選ぶ（累積の区間で決まる）",
+      "precondition": "なし",
+      "input": "固定の乱数 0、0.99、0.29",
+      "expected": "post、unfollow、reply",
+      "branches": [
+        "B11-T",
+        "B11-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-19 重みに比例して選ぶ（累積の区間で決まる）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-20",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "重み 0 の種類は選ばない",
+      "precondition": "なし",
+      "input": "follow・unfollow の重み 0、候補 4",
+      "expected": "follow・unfollow を含まない",
+      "branches": [
+        "B9-T",
+        "B9-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-20 重み 0 の種類は選ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-21",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "減点された種類は選ばれにくくなる",
+      "precondition": "なし",
+      "input": "種 0〜2999、recent=['post','post'] と []",
+      "expected": "post が選ばれる回数が減る",
+      "branches": [
+        "B11-T",
+        "B11-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-21 減点された種類は選ばれにくくなる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS61_DEV-22",
+      "target": "createCandidateRng",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "同じ種なら同じ候補になり、判定の乱数とは別の列を使う",
+      "precondition": "なし",
+      "input": "種 42、agent",
+      "expected": "同じ候補。最初の値が createRng(42, agent) と違う",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-61）",
+      "suspect": "",
+      "test_name": "TC-NOUS61_DEV-22 同じ種なら同じ候補になり、判定の乱数とは別の列を使う",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-001",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "salt が空の文字列なら、種とオフセット基底の XOR を mulberry32 に渡す",
+      "precondition": "なし",
+      "input": "種 12345、salt \"\"",
+      "expected": "mulberry32((12345 ^ 0x811c9dc5) >>> 0) と同じ列",
+      "branches": [
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS48_DEV-06（fnv1a32 の値だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-001 salt が空の文字列なら、種とオフセット基底（0x811c9dc5）の XOR を mulberry32 に渡す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-002",
+      "target": "fnv1a32",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "FNV-1a は UTF-16 ではなく UTF-8 のバイト列にかける（多バイトの字）",
+      "precondition": "なし",
+      "input": "\"あ\"（E3 81 82）",
+      "expected": "バイト列に手でかけた値と等しい",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-06 は ASCII だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-002 FNV-1a は UTF-8 のバイト列にかける（「あ」は E3 81 82 の 3 バイト）",
+      "result": "",
+      "note": "エージェント ID は ULID（ASCII）だが、salt に日本語が入っても同じ値になることを確かめる"
+    },
+    {
+      "id": "TC-UT_CAND-003",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "種の境界（0、0xFFFFFFFF、-1）でも 0 以上 1 未満の値を返す",
+      "precondition": "なし",
+      "input": "種 0、0xFFFFFFFF、-1（it.each）、各 100 個",
+      "expected": "すべて 0 以上 1 未満",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS48_DEV-04（種の境界は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-003 種の境界でも 0 以上 1 未満の値を返す",
+      "result": "",
+      "note": "cycle_seed は 32 ビットの整数（world.md）"
+    },
+    {
+      "id": "TC-UT_CAND-004",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "種 -1 は 0xFFFFFFFF と同じ乱数列になる（32 ビットに丸める）",
+      "precondition": "なし",
+      "input": "種 -1 と 0xFFFFFFFF",
+      "expected": "最初の 3 つが等しい",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-004 種 -1 は 0xFFFFFFFF と同じ乱数列になる（32 ビットに丸める）",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（XOR で 32 ビットに丸める）"
+    },
+    {
+      "id": "TC-UT_CAND-005",
+      "target": "createRng",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "乱数の関数ごとに状態を持ち、別に作った関数の列に影響しない",
+      "precondition": "なし",
+      "input": "同じ種・salt で a・b を作り、a を 3 回呼ぶ",
+      "expected": "b の最初の値は a の最初の値と等しい",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-005 乱数の関数ごとに状態を持ち、別に作った関数の列に影響しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_GATE-001",
+      "target": "decideParticipation",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "最初の乱数の値と確率が等しければ参加せず（< の境界）、わずかに上回れば参加する",
+      "precondition": "なし",
+      "input": "種 12345、活動頻度 3、確率 = 最初の値 v と v + 1e-9",
+      "expected": "v のとき false、v + 1e-9 のとき true",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS61_DEV-04（等しいときを見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_GATE-001 最初の乱数の値と確率が等しければ参加せず、わずかに上回れば参加する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_GATE-002",
+      "target": "decideParticipation",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "確率は config の値を使い、設定を変えれば判定が変わる（NFR-O-005）",
+      "precondition": "なし",
+      "input": "活動頻度 2 の確率を v/2 と (v+1)/2 にした設定",
+      "expected": "v/2 は false、(v+1)/2 は true。participationProbability は設定の値",
+      "branches": [
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS61_DEV-05（0 と 1 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_GATE-002 確率は config の値を使い、設定を変えれば判定が変わる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_GATE-003",
+      "target": "decideParticipation",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "活動頻度が範囲の外なら、decideParticipation も RangeError（乱数より先に止まる）",
+      "precondition": "なし",
+      "input": "Infinity、-1、1.0000001（it.each）",
+      "expected": "RangeError",
+      "branches": [
+        "B1-T",
+        "B2-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS61_DEV-02（participationProbability だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_GATE-003 活動頻度が 1〜5 の整数でなければ decideParticipation も RangeError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_GATE-004",
+      "target": "decideParticipation",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "エージェントが違えば、同じ種でも別の乱数で判定する（全員が同じ判定にならない）",
+      "precondition": "なし",
+      "input": "種 2026、50 体、活動頻度 3",
+      "expected": "参加と不参加の両方が出る",
+      "branches": [
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-03 は同じエージェントだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_GATE-004 エージェントが違えば、同じ種でも別の乱数で判定する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-006",
+      "target": "availableActions",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "条件がちょうど 1 件のとき、その種類だけが post に加わる",
+      "precondition": "なし",
+      "input": "参照する投稿 1 件、いいねできる投稿 1 件、フォローできる住人 1 体、フォロー中 1 体（it.each）",
+      "expected": "['post', その種類]",
+      "branches": [
+        "B4-T",
+        "B4-F",
+        "B5-T",
+        "B5-F",
+        "B6-T",
+        "B6-F",
+        "B7-T",
+        "B7-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS61_DEV-12（4 条件を同時に満たす値だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-006 条件がちょうど 1 件で、その種類だけが加わる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-007",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "減点 0 なら直近の行動の種類は重み 0 になり、候補に入らない",
+      "precondition": "なし",
+      "input": "recentPenalty=0、recent=['post']、種 0〜49",
+      "expected": "post の重み 0、どの候補にも post が無い",
+      "branches": [
+        "B8-F",
+        "B9-F",
+        "B9-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-007 減点 0 なら直近の行動の種類は重み 0 になり、候補に入らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-008",
+      "target": "candidateWeights",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "減点 1 なら直近の行動があっても重みは変わらない",
+      "precondition": "なし",
+      "input": "recentPenalty=1、recent=['post','post']",
+      "expected": "post の重み 3",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-008 減点 1 なら直近の行動があっても重みは変わらない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-009",
+      "target": "candidateWeights",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "直近の行動に選べない種類があっても、ほかの重みに影響しない",
+      "precondition": "なし",
+      "input": "available=['post']、recent=['follow','follow']",
+      "expected": "[['post', 3]] だけ",
+      "branches": [
+        "B8-T",
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-009 直近の行動に選べない種類があっても、ほかの重みに影響しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-010",
+      "target": "drawCandidates",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "選べる種類に重複があっても、候補は重複しない",
+      "precondition": "なし",
+      "input": "available=['post','post','reply']、乱数 0",
+      "expected": "['post','reply']",
+      "branches": [
+        "B8-F",
+        "B10-T",
+        "B11-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-010 選べる種類に重複があっても、候補は重複しない",
+      "result": "",
+      "note": "設計書に記載なし。重みを ACTION_KINDS の順に数えるので重複は 1 つになる（実装の値）"
+    },
+    {
+      "id": "TC-UT_CAND-011",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "乱数が 0 なら区間の先頭の種類を選ぶ",
+      "precondition": "なし",
+      "input": "乱数 0 を返し続ける",
+      "expected": "['post','reply']",
+      "branches": [
+        "B10-T",
+        "B11-T"
+      ],
+      "mock": "乱数を固定の値を返す関数に差し替え",
+      "dev_ref": "一部 TC-NOUS61_DEV-19（1 つ目だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-011 乱数が 0 なら区間の先頭の種類を選ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-012",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "乱数が 1 に近ければ区間の末尾の種類を選ぶ（2 つ目は残りの末尾）",
+      "precondition": "なし",
+      "input": "乱数 0.9999999999 を返し続ける",
+      "expected": "['unfollow','follow']",
+      "branches": [
+        "B10-T",
+        "B11-T",
+        "B11-F"
+      ],
+      "mock": "乱数を固定の値を返す関数に差し替え",
+      "dev_ref": "一部 TC-NOUS61_DEV-19（1 つ目だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-012 乱数が 1 に近ければ区間の末尾の種類を選ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-013",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "候補の数 4 で 5 種類が選べるとき、4 つを重複なしに選ぶ",
+      "precondition": "なし",
+      "input": "candidateCount=4、種 0〜29",
+      "expected": "どれも 4 つで重複なし",
+      "branches": [
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS61_DEV-14（件数だけ、種 1 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-013 候補の数 4 で 5 種類が選べるとき、4 つを重複なしに選ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-014",
+      "target": "drawCandidates",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "すべての重みが 0 なら ['post'] を返す",
+      "precondition": "なし",
+      "input": "weights すべて 0",
+      "expected": "['post']",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B12-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS61_DEV-16（available が空のときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-014 すべての重みが 0 なら ['post'] を返す",
+      "result": "",
+      "note": "重みがすべて 0 のときも ['post'] を返すのを仕様とする（2026-10-23 NOUS-102 で Kouhei Tajima が決定。設計書への追記は別に起票）"
+    },
+    {
+      "id": "TC-UT_CAND-015",
+      "target": "createCandidateRng",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "createCandidateRng は salt「agent_id:candidates」の createRng と同じ列になる",
+      "precondition": "なし",
+      "input": "種 42、agent-x",
+      "expected": "createRng(42, 'agent-x:candidates') と同じ列",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS61_DEV-22（判定の列と違うことだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-015 createCandidateRng は salt「agent_id:candidates」の createRng と同じ列になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-016",
+      "target": "drawCandidates",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "乱数は選んだ候補の数だけ使う（候補の抽選で余計に消費しない）",
+      "precondition": "なし",
+      "input": "candidateCount=3、乱数 0.5",
+      "expected": "乱数の呼び出しは 3 回",
+      "branches": [
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "呼ばれた回数を数える乱数に差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-016 乱数は選んだ候補の数だけ使う",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CAND-017",
+      "target": "drawCandidates",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "乱数が 1 を返しても（範囲の外）、区間の末尾の種類を選ぶ（どの区間にも入らないときの既定）",
+      "precondition": "なし",
+      "input": "乱数 1 を返し続ける",
+      "expected": "['unfollow','follow']",
+      "branches": [
+        "B11-F"
+      ],
+      "mock": "乱数を固定の値を返す関数に差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CAND-017 乱数が 1 を返しても（範囲の外）、区間の末尾の種類を選ぶ",
+      "result": "",
+      "note": "mulberry32 は 1 を返さないので、B11 が偽のまま終わる経路は乱数を差し替えて通す"
+    }
+  ],
+  "issues": [
+    "確認事項 1（決定済み）：重みがすべて 0（または選べる種類の重みがすべて 0）のとき、drawCandidates は post の重みが 0 でも ['post'] を返す（TC-UT_CAND-014）。2026-10-23、NOUS-102 で Kouhei Tajima がこの動きを仕様と決めた。設計書 generation.md への追記は、ケース作成の終わりにまとめて起票される。",
+    "確認事項 2：候補の抽選の乱数は salt を「agent_id:candidates」に分けている（NOUS-61 で Kouhei Tajima が了承）。設計書 4章の「3章と同じ種から作る」は満たしているが、salt の決まりは設計書に書かれていないので、改訂のときに追記するとよい。"
+  ]
+}
