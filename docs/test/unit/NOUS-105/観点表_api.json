@@ -1,0 +1,1000 @@
+{
+  "title": "観察 API 6 本（observer の apiRoutes・timelineService・threadService・agentService・mappers）",
+  "ticket": "NOUS-105",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-26",
+  "targets": [
+    "apps/server/src/observer/routes/apiRoutes.ts",
+    "apps/server/src/observer/services/timelineService.ts",
+    "apps/server/src/observer/services/threadService.ts",
+    "apps/server/src/observer/services/agentService.ts",
+    "apps/server/src/observer/mappers.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/observer/api.test.ts（実装時、NOUS-56）",
+    "apps/server/src/observer/api.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "一時 DB（createTestDb）（worlds・agents・posts・likes・follows・generation_events・invitations）。前提は generationSeed（seedAgent・seedEvent）とテストの中の insert",
+    "時計：FakeClock（2026-10-21T09:00:00.000Z）",
+    "HTTP：Hono の app.request。送信元は 192.168.1.20、Cookie は有効な招待"
+  ],
+  "design_refs": [
+    "BE 詳細設計 observer 2章（GET /api/world・timeline・thread・agents・posts・follows）・3章・4章（getTimeline・getNewerPosts・decorateWithCounts・getThread・buildTree・toThreadNode・getAgentProfile・getAgentPosts・getFollows・parseListQuery）",
+    "packages/shared の観察 API の Zod スキーマ（limit 1〜50 既定 30、depth 1〜10 既定 5、ID 26 字、cursor 200 字まで）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "mustGetCurrentWorld：現在の世界（archived 以外）がない（404 WORLD_NOT_FOUND）",
+      "location": "timelineService.ts:30"
+    },
+    {
+      "id": "B2",
+      "condition": "parsePostCursor：復号した配列が 2 要素でない",
+      "location": "timelineService.ts:40"
+    },
+    {
+      "id": "B3",
+      "condition": "parsePostCursor：秒が数字だけでない・post_id が 26 字でない",
+      "location": "timelineService.ts:44"
+    },
+    {
+      "id": "B4",
+      "condition": "parsePostCursor：秒が安全な整数でない",
+      "location": "timelineService.ts:48"
+    },
+    {
+      "id": "B5",
+      "condition": "getNewerPosts：since の投稿が現在の世界にない（空を返す）",
+      "location": "timelineService.ts:130"
+    },
+    {
+      "id": "B6",
+      "condition": "buildPostCursorPage：limit を超えて読めた（nextCursor を作る）",
+      "location": "timelineService.ts:228"
+    },
+    {
+      "id": "B7",
+      "condition": "decorateWithCounts：返信先がある（replyTo を付ける）",
+      "location": "timelineService.ts:217"
+    },
+    {
+      "id": "B8",
+      "condition": "getTimeline：since がある",
+      "location": "timelineService.ts:250"
+    },
+    {
+      "id": "B9",
+      "condition": "parseWithSchema：Zod の検証に失敗（400 VALIDATION_ERROR）",
+      "location": "apiRoutes.ts:23"
+    },
+    {
+      "id": "B10",
+      "condition": "parseListQuery：since がある（cursor を見ない）",
+      "location": "apiRoutes.ts:57"
+    },
+    {
+      "id": "B11",
+      "condition": "parseListQuery：allowSince が false（過去投稿）",
+      "location": "apiRoutes.ts:51"
+    },
+    {
+      "id": "B12",
+      "condition": "parseListQuery：cursor がある",
+      "location": "apiRoutes.ts:53・60"
+    },
+    {
+      "id": "B13",
+      "condition": "getThread：focus の投稿が現在の世界にない（404 POST_NOT_FOUND）",
+      "location": "threadService.ts:137"
+    },
+    {
+      "id": "B14",
+      "condition": "getThread：from がある",
+      "location": "threadService.ts:142"
+    },
+    {
+      "id": "B15",
+      "condition": "getThread：from が同じスレッドにない（404）",
+      "location": "threadService.ts:154"
+    },
+    {
+      "id": "B16",
+      "condition": "buildTree：段数が depth 以上（子を返さず moreCount に子孫の数）",
+      "location": "threadService.ts:93"
+    },
+    {
+      "id": "B17",
+      "condition": "toThreadNode：hidden（body・agent を null）",
+      "location": "mappers.ts:81"
+    },
+    {
+      "id": "B18",
+      "condition": "selectAgentProfile：エージェントが現在の世界にいない（404 AGENT_NOT_FOUND）",
+      "location": "agentService.ts:29"
+    },
+    {
+      "id": "B19",
+      "condition": "selectFollows：type が following",
+      "location": "agentService.ts:104"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS56_DEV-03",
+      "target": "GET /api/world",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running の世界で state・worldTimeSec・isRunning: true・updatedAt と Cache-Control: no-store を返す",
+      "precondition": "running の世界",
+      "input": "GET /api/world",
+      "expected": "state・worldTimeSec・isRunning: true・updatedAt、Cache-Control: no-store",
+      "branches": [
+        "B1-F",
+        "B9-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-03 running の世界で state・worldTimeSec・isRunning: true・updatedAt と Cache-Control: no-store を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-04",
+      "target": "GET /api/world",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "paused の世界では isRunning: false と確定済みの worldTimeSec を返す",
+      "precondition": "paused の世界",
+      "input": "GET /api/world",
+      "expected": "isRunning: false、確定済みの worldTimeSec",
+      "branches": [
+        "B1-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-04 paused の世界では isRunning: false と確定済みの worldTimeSec を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-05",
+      "target": "GET /api/world",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "現在の世界が存在しない場合は 404 WORLD_NOT_FOUND を返す",
+      "precondition": "世界がない",
+      "input": "GET /api/world",
+      "expected": "404 WORLD_NOT_FOUND",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-05 現在の世界が存在しない場合は 404 WORLD_NOT_FOUND を返す",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（NOUS-56 の未確定事項）"
+    },
+    {
+      "id": "TC-NOUS56_DEV-06",
+      "target": "GET /api/timeline",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "public の投稿だけを (world_time_sec, post_id) の降順で返し、hidden や別世界の投稿は含めない",
+      "precondition": "public・hidden・別の世界の投稿",
+      "input": "GET /api/timeline",
+      "expected": "public だけを (world_time_sec, post_id) の降順で",
+      "branches": [
+        "B6-F",
+        "B8-F",
+        "B10-F",
+        "B11-F",
+        "B12-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-06 public の投稿だけを (world_time_sec, post_id) の降順で返し、hidden や別世界の投稿は含めない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-07",
+      "target": "GET /api/timeline",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "limit と nextCursor で続きを重複・欠落なくページ送りできる",
+      "precondition": "5 件（同じ秒が 2 件）",
+      "input": "limit=2 で 3 ページ",
+      "expected": "重複・欠落なく [p5,p4]・[p3,p2]・[p1]、最後は nextCursor null",
+      "branches": [
+        "B6-T",
+        "B6-F",
+        "B12-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-07 limit と nextCursor で続きを重複・欠落なくページ送りできる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-08",
+      "target": "GET /api/timeline",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "replyCount（publicのみ）・likeCount・replyTo（hiddenの親でも返す）を付与する",
+      "precondition": "返信・いいね・hidden の親",
+      "input": "GET /api/timeline",
+      "expected": "replyCount（public だけ）・likeCount・replyTo（hidden の親でも返す）",
+      "branches": [
+        "B7-T",
+        "B7-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-08 replyCount（publicのみ）・likeCount・replyTo（hiddenの親でも返す）を付与する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-09",
+      "target": "GET /api/timeline",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "since 指定時はその投稿より新しい public 投稿を最大 50 件返し、nextCursor は null、cursor と両方あれば since を優先する",
+      "precondition": "since の投稿より新しい投稿",
+      "input": "since、since と cursor の両方",
+      "expected": "新しい public を最大 50 件、nextCursor null、since を優先",
+      "branches": [
+        "B5-F",
+        "B8-T",
+        "B10-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-09 since 指定時はその投稿より新しい public 投稿を最大 50 件返し、nextCursor は null、cursor と両方あれば since を優先する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-10",
+      "target": "GET /api/timeline",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "不正な cursor・limit・since で 400 VALIDATION_ERROR を返す",
+      "precondition": "running の世界",
+      "input": "limit=0・51・abc、since=short、cursor の 1 要素・負・数字でない・短い ID",
+      "expected": "400 VALIDATION_ERROR と各 fields",
+      "branches": [
+        "B9-T",
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-10 不正な cursor・limit・since で 400 VALIDATION_ERROR を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-11",
+      "target": "GET /api/posts/:postId/thread",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "スレッドの木を組み立て、hidden の節は body と agent を null（hidden: true）にして子を残す",
+      "precondition": "起点・hidden の返信・その子",
+      "input": "hidden の投稿を postId に",
+      "expected": "200、hidden の節は body・agent が null で子を残す、likeCount",
+      "branches": [
+        "B13-F",
+        "B14-F",
+        "B16-F",
+        "B17-T",
+        "B17-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-11 スレッドの木を組み立て、hidden の節は body と agent を null（hidden: true）にして子を残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-12",
+      "target": "GET /api/posts/:postId/thread",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "depth の上限で children を空にして moreCount に子孫総数を入れ、from 指定で部分木を返す",
+      "precondition": "段数 0〜3 の鎖（段数 3 が 2 件）",
+      "input": "depth=1、from=c2&depth=1",
+      "expected": "段数 1 の節の moreCount=3、from の部分木",
+      "branches": [
+        "B14-T",
+        "B15-F",
+        "B16-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-12 depth の上限で children を空にして moreCount に子孫総数を入れ、from 指定で部分木を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-13",
+      "target": "GET /api/posts/:postId/thread",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "存在しない postId・別スレッドの from は 404 POST_NOT_FOUND、不正な depth・from は 400 VALIDATION_ERROR",
+      "precondition": "2 つのスレッド",
+      "input": "存在しない postId、別スレッドの from、depth=11、from=bad",
+      "expected": "404 POST_NOT_FOUND・404・400・400",
+      "branches": [
+        "B13-T",
+        "B15-T",
+        "B9-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-13 存在しない postId・別スレッドの from は 404 POST_NOT_FOUND、不正な depth・from は 400 VALIDATION_ERROR",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-14",
+      "target": "GET /api/agents/:agentId",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "プロフィールと件数（継続中フォロー・public投稿のみ）を返し、activity_level は含めず、停止中も返す",
+      "precondition": "停止中のエージェント、継続中と解除済みのフォロー、public と hidden の投稿",
+      "input": "GET /api/agents/:agentId",
+      "expected": "プロフィールと件数、activity_level を含めない、停止中も返す",
+      "branches": [
+        "B18-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-14 プロフィールと件数（継続中フォロー・public投稿のみ）を返し、activity_level は含めず、停止中も返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-15",
+      "target": "GET /api/agents/:agentId",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "現在の世界にいないエージェントは 404 AGENT_NOT_FOUND を返す",
+      "precondition": "別の世界のエージェント",
+      "input": "GET /api/agents/:agentId",
+      "expected": "404 AGENT_NOT_FOUND",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-15 現在の世界にいないエージェントは 404 AGENT_NOT_FOUND を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-16",
+      "target": "GET /api/agents/:agentId/posts",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "指定エージェントの public 投稿（返信含む）だけをカーソルでページ送りでき、不在なら 404",
+      "precondition": "自分と他人の投稿、hidden",
+      "input": "limit と cursor、存在しないエージェント",
+      "expected": "自分の public（返信を含む）だけをページ送り、不在は 404",
+      "branches": [
+        "B11-T",
+        "B12-T",
+        "B18-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-16 指定エージェントの public 投稿（返信含む）だけをカーソルでページ送りでき、不在なら 404",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-17",
+      "target": "GET /api/agents/:agentId/follows",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "following と followers を started_world_sec 降順で返し、解除済み（ended_world_sec あり）は含めない",
+      "precondition": "継続中と解除済みのフォロー",
+      "input": "type=following・followers",
+      "expected": "started_world_sec の降順、解除済みは含めない",
+      "branches": [
+        "B19-T",
+        "B19-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-17 following と followers を started_world_sec 降順で返し、解除済み（ended_world_sec あり）は含めない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS56_DEV-18",
+      "target": "GET /api/agents/:agentId/follows",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "不正な type で 400 VALIDATION_ERROR、存在しないエージェントで 404 AGENT_NOT_FOUND を返す",
+      "precondition": "running の世界",
+      "input": "type=bad、存在しないエージェント",
+      "expected": "400 VALIDATION_ERROR、404 AGENT_NOT_FOUND",
+      "branches": [
+        "B9-T",
+        "B18-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "実装時のテスト（NOUS-56）",
+      "suspect": "",
+      "test_name": "TC-NOUS56_DEV-18 不正な type で 400 VALIDATION_ERROR、存在しないエージェントで 404 AGENT_NOT_FOUND を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-023",
+      "target": "GET /api/world",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "running・paused 以外の state もそのまま返し、isRunning は false",
+      "precondition": "preparing・limit_stopped・emergency_stopped の世界（world_elapsed_sec 777）",
+      "input": "GET /api/world",
+      "expected": "state はそのまま、worldTimeSec 777、isRunning: false",
+      "branches": [
+        "B1-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-04（paused だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-023 running・paused 以外の state もそのまま返し、isRunning は false",
+      "result": "",
+      "note": "it.each の 3 行を 1 件として数える"
+    },
+    {
+      "id": "TC-UT_OBS-024",
+      "target": "GET /api/world",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "アーカイブ済みの世界しかなければ 404 WORLD_NOT_FOUND",
+      "precondition": "アーカイブ済みの世界だけ",
+      "input": "GET /api/world",
+      "expected": "404 WORLD_NOT_FOUND",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-05（世界がまったくない場合）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-024 アーカイブ済みの世界しかなければ 404 WORLD_NOT_FOUND",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-025",
+      "target": "GET /api/timeline",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "limit=1 は 1 件と nextCursor を返す",
+      "precondition": "public の投稿 2 件",
+      "input": "limit=1",
+      "expected": "新しい 1 件と nextCursor",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし（DEV は limit=2 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-025 limit=1 は 1 件と nextCursor を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-026",
+      "target": "GET /api/timeline",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "limit=50 で 51 件あれば 50 件と nextCursor を返す",
+      "precondition": "public の投稿 51 件",
+      "input": "limit=50",
+      "expected": "50 件と nextCursor",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-026 limit=50 で 51 件あれば 50 件と nextCursor を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-027",
+      "target": "GET /api/timeline",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "limit を省略すると 30 件ずつ返す",
+      "precondition": "public の投稿 31 件",
+      "input": "limit なし",
+      "expected": "30 件（既定）と nextCursor",
+      "branches": [
+        "B6-T",
+        "B12-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-027 limit を省略すると 30 件ずつ返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-028",
+      "target": "GET /api/timeline",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "投稿がちょうど limit 件なら nextCursor は null",
+      "precondition": "public の投稿 3 件",
+      "input": "limit=3",
+      "expected": "3 件、nextCursor null（limit＋1 件目がない）",
+      "branches": [
+        "B6-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-07（最後のページが 1 件の場合）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-028 投稿がちょうど limit 件なら nextCursor は null",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-029",
+      "target": "parseListQuery",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "limit が整数でない・空なら 400（fields.limit）",
+      "precondition": "running の世界",
+      "input": "limit=1.5、limit=（空）",
+      "expected": "400、fields.limit",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-10（0・51・abc）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-029 limit が整数でない・空なら 400（fields.limit）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-030",
+      "target": "parseListQuery",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "cursor が Base64URL の字でない・201 字なら 400（fields.cursor）",
+      "precondition": "running の世界",
+      "input": "cursor=abc+def、cursor=A×201",
+      "expected": "400、fields.cursor",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし（DEV は復号した中身の不正だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-030 cursor が Base64URL の字でない・201 字なら 400（fields.cursor）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-031",
+      "target": "parsePostCursor",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "cursor の秒が安全な整数を超えれば 400（fields.cursor）",
+      "precondition": "running の世界",
+      "input": "cursor = encodeCursor([\"9007199254740993\", 26 字の ID])",
+      "expected": "400、fields.cursor",
+      "branches": [
+        "B3-F",
+        "B4-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-031 cursor の秒が安全な整数を超えれば 400（fields.cursor）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-032",
+      "target": "parsePostCursor / getTimeline",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "cursor の秒が 0 なら、それより古い投稿がないので空と nextCursor null",
+      "precondition": "public の投稿 2 件（100 秒・101 秒）",
+      "input": "cursor = encodeCursor([\"0\", ID])",
+      "expected": "200、items は空、nextCursor null",
+      "branches": [
+        "B2-F",
+        "B3-F",
+        "B4-F",
+        "B12-T",
+        "B6-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-032 cursor の秒が 0 なら、それより古い投稿がないので空と nextCursor null",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-033",
+      "target": "getNewerPosts",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "since の投稿が非表示でも、それより新しい public の投稿を返す",
+      "precondition": "hidden の投稿（100 秒）と public の投稿（200 秒）",
+      "input": "since = hidden の投稿",
+      "expected": "public の 1 件",
+      "branches": [
+        "B8-T",
+        "B5-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-09（since が public の場合）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-033 since の投稿が非表示でも、それより新しい public の投稿を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-034",
+      "target": "getNewerPosts",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "since が別の世界（アーカイブ済み）の投稿なら空を返す",
+      "precondition": "アーカイブ済みの世界の投稿、今の世界の投稿 2 件",
+      "input": "since = アーカイブ済みの世界の投稿",
+      "expected": "items は空、nextCursor null",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-034 since が別の世界（アーカイブ済み）の投稿なら空を返す",
+      "result": "",
+      "note": "設計の 4章「なければ空」"
+    },
+    {
+      "id": "TC-UT_OBS-035",
+      "target": "toAgentSummary / getTimeline",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "停止中のエージェントの投稿も返し、agent に state: stopped と isAi: true が付く",
+      "precondition": "停止中のエージェントの投稿",
+      "input": "GET /api/timeline",
+      "expected": "agent に state: stopped、isAi: true",
+      "branches": [
+        "B7-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし（停止中は DEV-14 のプロフィールだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-035 停止中のエージェントの投稿も返し、agent に state: stopped と isAi: true が付く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-036",
+      "target": "toPostView",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "本文は HTML に変換せず、そのままの文字列で返す",
+      "precondition": "本文が <script>… & <b>…</b> の投稿",
+      "input": "GET /api/timeline",
+      "expected": "body は元の文字列のまま（HTML にしない。NFR-S-011）",
+      "branches": [],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-036 本文は HTML に変換せず、そのままの文字列で返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-037",
+      "target": "GET /api/posts/:postId/thread",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "depth=0 は 400（fields.depth）",
+      "precondition": "起点 1 件",
+      "input": "depth=0",
+      "expected": "400、fields.depth",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-13（depth=11）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-037 depth=0 は 400（fields.depth）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-038",
+      "target": "buildTree",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "depth=10 は段数 10 まで返し、段数 10 の節の moreCount に残りの子孫の数を入れる",
+      "precondition": "段数 0〜11 の鎖（12 件）",
+      "input": "depth=10",
+      "expected": "段数 10 までの 11 節、段数 10 の節は children が空で moreCount=1",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし（DEV は depth=1 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-038 depth=10 は段数 10 まで返し、段数 10 の節の moreCount に残りの子孫の数を入れる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-039",
+      "target": "buildTree",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "depth を省略すると 5 段まで返す",
+      "precondition": "段数 0〜6 の鎖（7 件）",
+      "input": "depth なし",
+      "expected": "段数 5 までの 6 節（既定 5）、段数 5 の節の moreCount=1",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-039 depth を省略すると 5 段まで返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-040",
+      "target": "toThreadNode",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "起点が非表示なら起点の body・agent を null にし、子は残す",
+      "precondition": "hidden の起点と public の返信",
+      "input": "返信の postId でスレッドを開く",
+      "expected": "起点は hidden: true・body と agent が null、子は残る。応答に起点の本文が出ない",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-11（hidden の返信の場合）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-040 起点が非表示なら起点の body・agent を null にし、子は残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-041",
+      "target": "getThread",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "アーカイブ済みの世界の投稿は 404 POST_NOT_FOUND",
+      "precondition": "アーカイブ済みの世界の投稿",
+      "input": "その投稿の postId",
+      "expected": "404 POST_NOT_FOUND",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-13（存在しない ID）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-041 アーカイブ済みの世界の投稿は 404 POST_NOT_FOUND",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-042",
+      "target": "buildTree",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "子は world_time_sec の昇順、同じ秒なら post_id の昇順に並べる",
+      "precondition": "起点の子 3 件（300 秒、200 秒の CH0003、200 秒の CH0002）",
+      "input": "起点でスレッドを開く",
+      "expected": "children は CH0002・CH0003・300 秒の順",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-042 子は world_time_sec の昇順、同じ秒なら post_id の昇順に並べる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-043",
+      "target": "getThread",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "from に非表示の投稿を指定すると、伏せた形の節を起点にした部分木を返す",
+      "precondition": "起点・hidden の返信・その子",
+      "input": "from = hidden の返信",
+      "expected": "起点は伏せた形の hidden の返信、子はその子",
+      "branches": [
+        "B14-T",
+        "B15-F",
+        "B17-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-12（public の from）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-043 from に非表示の投稿を指定すると、伏せた形の節を起点にした部分木を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-044",
+      "target": "GET /api/agents/:agentId",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "アーカイブ済みの世界のエージェントは 404 AGENT_NOT_FOUND",
+      "precondition": "アーカイブ済みの世界のエージェント",
+      "input": "そのエージェントの agentId",
+      "expected": "404 AGENT_NOT_FOUND",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-15（同じく別の世界）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-044 アーカイブ済みの世界のエージェントは 404 AGENT_NOT_FOUND",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-045",
+      "target": "GET /api/agents/:agentId",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "agentId が 25 字なら 400（fields.agentId）",
+      "precondition": "running の世界",
+      "input": "agentId が 25 字",
+      "expected": "400、fields.agentId",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-045 agentId が 25 字なら 400（fields.agentId）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-046",
+      "target": "parseListQuery（allowSince: false）",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "過去投稿では since を渡しても無視し、cursor と limit で返す",
+      "precondition": "minato の投稿 3 件",
+      "input": "limit=2&since=2 件目",
+      "expected": "since を無視し、新しい 2 件と nextCursor",
+      "branches": [
+        "B11-T",
+        "B12-F",
+        "B6-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-046 過去投稿では since を渡しても無視し、cursor と limit で返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-047",
+      "target": "GET /api/agents/:agentId/posts",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "過去投稿がちょうど limit 件なら nextCursor は null",
+      "precondition": "minato の投稿 2 件",
+      "input": "limit=2",
+      "expected": "2 件、nextCursor null",
+      "branches": [
+        "B6-F"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-16",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-047 過去投稿がちょうど limit 件なら nextCursor は null",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-048",
+      "target": "GET /api/agents/:agentId/follows",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "follows の type を省略すると 400（fields.type）",
+      "precondition": "running の世界",
+      "input": "type なし",
+      "expected": "400、fields.type",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "一部 TC-NOUS56_DEV-18（type=bad）",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-048 follows の type を省略すると 400（fields.type）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-049",
+      "target": "getFollows",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "フォローが 0 件なら items は空の配列",
+      "precondition": "フォローなし",
+      "input": "type=following",
+      "expected": "{ items: [] }",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-049 フォローが 0 件なら items は空の配列",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OBS-050",
+      "target": "toFollowItem",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "停止中の相手も一覧に出し、state: stopped と isAi: true が付く",
+      "precondition": "minato が停止中の sleepy をフォロー中",
+      "input": "type=following",
+      "expected": "sleepy が state: stopped・isAi: true で出る",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "createObserverApp（staticDir: null）を app.request で呼ぶ。送信元は env.incoming.socket.remoteAddress で渡す。一時 DB（createTestDb）。FakeClock 2026-10-21T09:00:00.000Z。logger は sinks で行を集める",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OBS-050 停止中の相手も一覧に出し、state: stopped と isAi: true が付く",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "確認事項 1：TC-NOUS56_DEV-01・02（lib/cursor.test.ts）は lib の観点表（NOUS-89 の見本・NOUS-90）の対象なので、この観点表には載せない。",
+    "確認事項 2：/api/* の 400・404 などのエラーの応答に Cache-Control: no-store が付くかは、設計書に記載がない（2章は成功時のヘッダーとして書いている）。単体テストでは見ていない。",
+    "確認事項 3：スレッドの hidden の節も likeCount と worldTimeSec を返す（設計の 2章の例は body・agent だけを null にしている）。表示に使わないなら問題ないと考える。"
+  ]
+}
