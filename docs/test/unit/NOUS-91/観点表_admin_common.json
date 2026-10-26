@@ -1,0 +1,965 @@
+{
+  "title": "管理サーバーの共通（adminServer・context・middleware）",
+  "ticket": "NOUS-91",
+  "author": "Jane Doe（テスト担当）",
+  "created_on": "2026-10-26",
+  "targets": [
+    "apps/server/src/admin/adminServer.ts",
+    "apps/server/src/admin/context.ts",
+    "apps/server/src/admin/middleware/csrf.ts",
+    "apps/server/src/admin/middleware/errorHandler.ts",
+    "apps/server/src/admin/middleware/sessionAuth.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）、Hono 4.6",
+  "test_files": [
+    "apps/server/src/admin/adminServer.test.ts（実装時、NOUS-52）",
+    "apps/server/src/admin/middleware/csrf.test.ts（実装時、NOUS-52）",
+    "apps/server/src/admin/middleware/errorHandler.test.ts（実装時、NOUS-52）",
+    "apps/server/src/admin/middleware/sessionAuth.test.ts（実装時、NOUS-52）",
+    "apps/server/src/admin/adminServer.ut.test.ts（単体テストで追加）",
+    "apps/server/src/admin/middleware/csrf.ut.test.ts（単体テストで追加）",
+    "apps/server/src/admin/middleware/errorHandler.ut.test.ts（単体テストで追加）",
+    "apps/server/src/admin/middleware/sessionAuth.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "SQLite（一時 DB）",
+    "Clock（FakeClock）",
+    "Logger（captureLogger）",
+    "@hono/node-server（startAdminServer の listen。ポート 0）",
+    "node:fs（画面の静的ファイル）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 admin_auth 1章・2章「共通の決まり」・3章 findActiveSession・deleteExpiredSessions・4章 startAdminServer・assertLocalBind・requireAdminSession・requireCsrf・errorHandler・5章・6章",
+    "基本設計書 概要 4章「エラーの返し方」・8章、NFR-S-007"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "host !== \"127.0.0.1\"",
+      "location": "adminServer.ts:45"
+    },
+    {
+      "id": "B2",
+      "condition": "公開の道（PUBLIC_ROUTES のメソッドと道の組。末尾の / は除く）",
+      "location": "adminServer.ts:50-51・55"
+    },
+    {
+      "id": "B3",
+      "condition": "options.staticDir が未指定（既定の apps/admin/dist）",
+      "location": "adminServer.ts:85"
+    },
+    {
+      "id": "B4",
+      "condition": "staticDir があり、ディレクトリが存在する",
+      "location": "adminServer.ts:86"
+    },
+    {
+      "id": "B5",
+      "condition": "道が /admin/api で始まる（index.html を返さない）",
+      "location": "adminServer.ts:92"
+    },
+    {
+      "id": "B6",
+      "condition": "options.host が指定されている",
+      "location": "adminServer.ts:119"
+    },
+    {
+      "id": "B7",
+      "condition": "deleted > 0（削除の件数をログに出す）",
+      "location": "adminServer.ts:126"
+    },
+    {
+      "id": "B8",
+      "condition": "削除で例外（catch）",
+      "location": "adminServer.ts:127"
+    },
+    {
+      "id": "B9",
+      "condition": "GET・HEAD（CSRF を確かめない）",
+      "location": "middleware/csrf.ts:16"
+    },
+    {
+      "id": "B10",
+      "condition": "!header || !admin || !safeEqual",
+      "location": "middleware/csrf.ts:22"
+    },
+    {
+      "id": "B11",
+      "condition": "err instanceof AppError",
+      "location": "middleware/errorHandler.ts:38"
+    },
+    {
+      "id": "B12",
+      "condition": "err instanceof ZodError",
+      "location": "middleware/errorHandler.ts:42"
+    },
+    {
+      "id": "B13",
+      "condition": "SqliteError が見つかった",
+      "location": "middleware/errorHandler.ts:47"
+    },
+    {
+      "id": "B14",
+      "condition": "UNIQUE・PRIMARYKEY の違反",
+      "location": "middleware/errorHandler.ts:23・49"
+    },
+    {
+      "id": "B15",
+      "condition": "name が SqliteError（偽なら cause をたどる）",
+      "location": "middleware/errorHandler.ts:12-17"
+    },
+    {
+      "id": "B16",
+      "condition": "code が文字列でない（SQLITE_ERROR にする）",
+      "location": "middleware/errorHandler.ts:15"
+    },
+    {
+      "id": "B17",
+      "condition": "issue.path が空（_ にする）",
+      "location": "middleware/errorHandler.ts:30"
+    },
+    {
+      "id": "B18",
+      "condition": "同じ項目にすでに文言がある（??= で残す）",
+      "location": "middleware/errorHandler.ts:31"
+    },
+    {
+      "id": "B19",
+      "condition": "!cookie",
+      "location": "middleware/sessionAuth.ts:73"
+    },
+    {
+      "id": "B20",
+      "condition": "!session（無効・期限切れ）",
+      "location": "middleware/sessionAuth.ts:79"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS52_DEV-17",
+      "target": "assertLocalBind / startAdminServer",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "127.0.0.1 以外のアドレスでは起動しない",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "127.0.0.1 以外のアドレスでは起動しない",
+      "branches": [
+        "B1-T",
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-17 127.0.0.1 以外のアドレスでは起動しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-18",
+      "target": "createAdminApp（adminApiGuard）",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "/admin/api 以下はセッションがなければ 401",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "/admin/api 以下はセッションがなければ 401",
+      "branches": [
+        "B2-F",
+        "B19-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-18 /admin/api 以下はセッションがなければ 401",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-19",
+      "target": "createAdminApp（adminApiGuard）",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "変更の要求はセッションに加えて CSRF を確かめる",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "変更の要求はセッションに加えて CSRF を確かめる",
+      "branches": [
+        "B2-F",
+        "B9-F",
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-19 変更の要求はセッションに加えて CSRF を確かめる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-20",
+      "target": "createAdminApp（PUBLIC_ROUTES）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "login と GET /session は requireAdminSession・requireCsrf を通さない",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "login と GET /session は requireAdminSession・requireCsrf を通さない",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-20 login と GET /session は requireAdminSession・requireCsrf を通さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-21",
+      "target": "startAdminServer（期限切れの削除）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "起動時に期限切れのセッションを消し、60 分ごとに消し直す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "起動時に期限切れのセッションを消し、60 分ごとに消し直す",
+      "branches": [
+        "B6-T",
+        "B7-T",
+        "B8-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-21 起動時に期限切れのセッションを消し、60 分ごとに消し直す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-22",
+      "target": "createAdminApp（静的ファイル）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "画面の静的ファイルを配り、画面の URL では index.html を返す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "画面の静的ファイルを配り、画面の URL では index.html を返す",
+      "branches": [
+        "B3-F",
+        "B4-T",
+        "B5-T",
+        "B5-F"
+      ],
+      "mock": "一時ディレクトリ（mkdtemp）、一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-22 画面の静的ファイルを配り、画面の URL では index.html を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-06",
+      "target": "requireCsrf",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "GET は X-CSRF-Token なしで通る",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "GET は X-CSRF-Token なしで通る",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-06 GET は X-CSRF-Token なしで通る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-07",
+      "target": "requireCsrf",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "POST・PUT・DELETE は一致するトークンで通る",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "POST・PUT・DELETE は一致するトークンで通る",
+      "branches": [
+        "B9-F",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-07 POST・PUT・DELETE は一致するトークンで通る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-08",
+      "target": "requireCsrf",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "トークンがない・違うなら 403 CSRF_INVALID",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "トークンがない・違うなら 403 CSRF_INVALID",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-08 トークンがない・違うなら 403 CSRF_INVALID",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-09",
+      "target": "errorHandler",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "AppError を status と code・message・fields の本文で返す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "AppError を status と code・message・fields の本文で返す",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-09 AppError を status と code・message・fields の本文で返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-10",
+      "target": "errorHandler / zodFields",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ZodError を 400 VALIDATION_ERROR と項目ごとのメッセージにする",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "ZodError を 400 VALIDATION_ERROR と項目ごとのメッセージにする",
+      "branches": [
+        "B11-F",
+        "B12-T",
+        "B17-F",
+        "B18-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-10 ZodError を 400 VALIDATION_ERROR と項目ごとのメッセージにする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-11",
+      "target": "errorHandler",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "想定外の例外は 500 INTERNAL_ERROR の固定の文言で返し、スタックはログだけに出す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "想定外の例外は 500 INTERNAL_ERROR の固定の文言で返し、スタックはログだけに出す",
+      "branches": [
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-11 想定外の例外は 500 INTERNAL_ERROR の固定の文言で返し、スタックはログだけに出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-12",
+      "target": "toAppError",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "SqliteError の UNIQUE の違反は SQL の文を出さずに 409 CONFLICT にする",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "SqliteError の UNIQUE の違反は SQL の文を出さずに 409 CONFLICT にする",
+      "branches": [
+        "B13-T",
+        "B14-T",
+        "B15-T"
+      ],
+      "mock": "一時 DB（createTestDb）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-12 SqliteError の UNIQUE の違反は SQL の文を出さずに 409 CONFLICT にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-23",
+      "target": "toAppError",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "UNIQUE 以外の SqliteError（CHECK の違反）は 500 INTERNAL_ERROR にする",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "UNIQUE 以外の SqliteError（CHECK の違反）は 500 INTERNAL_ERROR にする",
+      "branches": [
+        "B13-T",
+        "B14-F"
+      ],
+      "mock": "一時 DB（createTestDb）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-23 UNIQUE 以外の SqliteError（CHECK の違反）は 500 INTERNAL_ERROR にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-01",
+      "target": "requireAdminSession",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "有効なセッションの Cookie で通り、c.var.admin に管理者が入る",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "有効なセッションの Cookie で通り、c.var.admin に管理者が入る",
+      "branches": [
+        "B19-F",
+        "B20-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-01 有効なセッションの Cookie で通り、c.var.admin に管理者が入る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-02",
+      "target": "requireAdminSession",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "Cookie がない・知らない値なら 401 ADMIN_UNAUTHORIZED",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "Cookie がない・知らない値なら 401 ADMIN_UNAUTHORIZED",
+      "branches": [
+        "B19-T",
+        "B20-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-02 Cookie がない・知らない値なら 401 ADMIN_UNAUTHORIZED",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-03",
+      "target": "requireAdminSession（touchSession）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "最終操作を更新する",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "最終操作を更新する",
+      "branches": [
+        "B20-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-03 最終操作を更新する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-04",
+      "target": "findActiveSession",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "作成から 8 時間・最終操作から 60 分を過ぎたセッションは無効",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "作成から 8 時間・最終操作から 60 分を過ぎたセッションは無効",
+      "branches": [],
+      "mock": "一時 DB（createTestDb）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-04 作成から 8 時間・最終操作から 60 分を過ぎたセッションは無効",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS52_DEV-05",
+      "target": "deleteExpiredSessions",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "deleteExpiredSessions が失効したものだけを消す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "deleteExpiredSessions が失効したものだけを消す",
+      "branches": [],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-52）",
+      "suspect": "",
+      "test_name": "TC-NOUS52_DEV-05 deleteExpiredSessions が失効したものだけを消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-001",
+      "target": "assertLocalBind",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "assertLocalBind は 127.0.0.1 以外を AdminBindError にし、指定のアドレスを文言に入れる",
+      "precondition": "なし",
+      "input": "host = localhost、0.0.0.0、::1、127.0.0.2、空文字",
+      "expected": "どれも AdminBindError。文言に「（指定: <host>）」",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS52_DEV-17（0.0.0.0 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-001 assertLocalBind は 127.0.0.1 以外を AdminBindError にし、指定のアドレスを文言に入れる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-002",
+      "target": "startAdminServer",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "127.0.0.1 以外を渡すと、期限切れのセッションの削除も定期の削除も始めずに止まる",
+      "precondition": "作成から 2 時間たったセッション 1 件",
+      "input": "host = 0.0.0.0",
+      "expected": "AdminBindError で止まり、セッションは消さず、定期の削除のタイマーも張らない（listen の前に止める）",
+      "branches": [
+        "B1-T",
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "なし（DEV-17 は assertLocalBind だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-002 127.0.0.1 以外を渡すと、期限切れのセッションの削除も定期の削除も始めずに止まる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-003",
+      "target": "createAdminApp（adminApiGuard）",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "公開の道とメソッドが違えばセッションを求める",
+      "precondition": "Cookie なし",
+      "input": "POST /session、GET /login、DELETE /session",
+      "expected": "どれも 401 ADMIN_UNAUTHORIZED（公開の道はメソッドと道の組で決まる）",
+      "branches": [
+        "B2-F",
+        "B19-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS52_DEV-20（公開の組だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-003 公開の道とメソッドが違えばセッションを求める",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-004",
+      "target": "createAdminApp（PUBLIC_ROUTES の HEAD）",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "HEAD /admin/api/session は CSRF を求めず、有効なセッションなら 200 を返す",
+      "precondition": "有効なセッション",
+      "input": "HEAD /admin/api/session（X-CSRF-Token なし）",
+      "expected": "200（CSRF を求めない）",
+      "branches": [
+        "B2-T",
+        "B19-F",
+        "B20-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-004 HEAD /admin/api/session は CSRF を求めず、有効なセッションなら 200 を返す",
+      "result": "",
+      "note": "Hono は HEAD を GET の道で処理するため、GET /session と同じく authRoutes の requireAdminSession で Cookie を確かめる"
+    },
+    {
+      "id": "TC-UT_ADM-005",
+      "target": "createAdminApp（静的ファイル）",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "ログイン中でも、/admin/api 以下の知らない道には index.html を返さない",
+      "precondition": "画面の置き場所あり、有効なセッション",
+      "input": "GET /admin/api/unknown",
+      "expected": "404 で、index.html を返さない",
+      "branches": [
+        "B4-T",
+        "B5-T"
+      ],
+      "mock": "一時ディレクトリ（mkdtemp）、一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS52_DEV-22（セッションなしの 401 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-005 ログイン中でも、/admin/api 以下の知らない道には index.html を返さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-006",
+      "target": "createAdminApp（静的ファイル）",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "静的ファイルの置き場所が無ければ画面を配らない",
+      "precondition": "画面の置き場所のディレクトリがない",
+      "input": "GET /agents",
+      "expected": "404（画面を配らない）",
+      "branches": [
+        "B3-F",
+        "B4-F"
+      ],
+      "mock": "一時ディレクトリ（mkdtemp）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-006 静的ファイルの置き場所が無ければ画面を配らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-007",
+      "target": "startAdminServer（期限切れの削除）",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "起動時の削除が 0 件ならログを出さず、1 件以上なら件数をログに出す",
+      "precondition": "セッションなし → 2 時間後に 1 件",
+      "input": "起動、FakeClock を 2 時間進める",
+      "expected": "起動時は admin_sessions_swept を出さず、削除が 1 件のときだけ info で deleted: 1 を出す",
+      "branches": [
+        "B7-T",
+        "B7-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）、captureLogger",
+      "dev_ref": "一部 TC-NOUS52_DEV-21（件数だけで、ログを見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-007 起動時の削除が 0 件ならログを出さず、1 件以上なら件数をログに出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-008",
+      "target": "startAdminServer（期限切れの削除）",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "期限切れのセッションの削除に失敗しても、error のログを出して起動を続ける",
+      "precondition": "DB を閉じておく",
+      "input": "起動",
+      "expected": "error で admin_sessions_sweep_failed を出し、起動を続けて定期の削除のタイマーを張る",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）、captureLogger",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-008 期限切れのセッションの削除に失敗しても、error のログを出して起動を続ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-009",
+      "target": "requireCsrf",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "トークンが合っていても、requireAdminSession を通っていない（c.var.admin がない）なら 403",
+      "precondition": "c.var.admin を入れない",
+      "input": "POST、正しい形の X-CSRF-Token",
+      "expected": "403 CSRF_INVALID",
+      "branches": [
+        "B9-F",
+        "B10-T"
+      ],
+      "mock": "c.var.admin を差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-009 トークンが合っていても、requireAdminSession を通っていない（c.var.admin がない）なら 403",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-010",
+      "target": "requireCsrf",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "PATCH も変更の要求として CSRF を確かめる",
+      "precondition": "c.var.admin あり",
+      "input": "PATCH（トークンなし／あり）",
+      "expected": "なし：403、あり：200",
+      "branches": [
+        "B9-F",
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "c.var.admin を差し替え",
+      "dev_ref": "一部 TC-NOUS52_DEV-07・08（POST・PUT・DELETE だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-010 PATCH も変更の要求として CSRF を確かめる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-011",
+      "target": "requireCsrf",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "ヘッダーの名前は大文字小文字を問わない",
+      "precondition": "c.var.admin あり",
+      "input": "POST、ヘッダー名 x-csrf-token（小文字）",
+      "expected": "200",
+      "branches": [
+        "B9-F",
+        "B10-F"
+      ],
+      "mock": "c.var.admin を差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-011 ヘッダーの名前は大文字小文字を問わない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-012",
+      "target": "requireCsrf",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "トークンの長さ・中身が少しでも違えば 403",
+      "precondition": "c.var.admin あり",
+      "input": "DELETE、1 字短い・最後の 1 字だけ違う・空のトークン",
+      "expected": "どれも 403",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "c.var.admin を差し替え",
+      "dev_ref": "一部 TC-NOUS52_DEV-08（なし・まったく違う値だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-012 トークンの長さ・中身が少しでも違えば 403",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-013",
+      "target": "toAppError（findSqliteError）",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "Drizzle などが cause に包んだ SqliteError も UNIQUE の違反として 409 CONFLICT にする",
+      "precondition": "なし",
+      "input": "cause に SqliteError（SQLITE_CONSTRAINT_UNIQUE）を持つ Error",
+      "expected": "409 CONFLICT",
+      "branches": [
+        "B13-T",
+        "B14-T",
+        "B15-F",
+        "B15-T"
+      ],
+      "mock": "SqliteError と同じ name・code の Error",
+      "dev_ref": "一部 TC-NOUS52_DEV-12（包まれていない SqliteError だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-013 Drizzle などが cause に包んだ SqliteError も UNIQUE の違反として 409 CONFLICT にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-014",
+      "target": "toAppError（findSqliteError）",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "cause をたどるのは 5 段まで",
+      "precondition": "なし",
+      "input": "SqliteError を cause で 4 回・5 回包む",
+      "expected": "4 回：409 CONFLICT、5 回：500 INTERNAL_ERROR（たどるのは 5 段まで）",
+      "branches": [
+        "B13-T",
+        "B13-F",
+        "B15-T",
+        "B15-F"
+      ],
+      "mock": "SqliteError と同じ name・code の Error",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-014 cause をたどるのは 5 段まで",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-015",
+      "target": "toAppError / isUniqueViolation",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "主キーの違反は 409、外部キーの違反と文字列でない code は 500 にする",
+      "precondition": "なし",
+      "input": "code = SQLITE_CONSTRAINT_PRIMARYKEY、SQLITE_CONSTRAINT_FOREIGNKEY、123（数値）",
+      "expected": "主キー：409、外部キー：500、数値：code を SQLITE_ERROR としてログに出し 500",
+      "branches": [
+        "B14-T",
+        "B14-F",
+        "B16-T",
+        "B16-F"
+      ],
+      "mock": "SqliteError と同じ name・code の Error、captureLogger",
+      "dev_ref": "一部 TC-NOUS52_DEV-12・23（UNIQUE と CHECK だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-015 主キーの違反は 409、外部キーの違反と文字列でない code は 500 にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-016",
+      "target": "zodFields",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "zodFields は項目のない問題を _ に、同じ項目の2つ目以降は捨てて最初の文言にする",
+      "precondition": "なし",
+      "input": "label が min と regex の両方に違反、項目のない refine の違反",
+      "expected": "label は最初の文言「3 字以上」だけ、項目のない問題は _ に入る",
+      "branches": [
+        "B17-T",
+        "B17-F",
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS52_DEV-10（項目ごとに 1 つずつだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-016 zodFields は項目のない問題を _ に、同じ項目の2つ目以降は捨てて最初の文言にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-017",
+      "target": "toAppError",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "toAppError は Error でない値（文字列）も 500 INTERNAL_ERROR の固定の文言にする",
+      "precondition": "なし",
+      "input": "文字列 \"raw\"",
+      "expected": "500 INTERNAL_ERROR の固定の文言、error で unexpected_error と値をログに出す",
+      "branches": [
+        "B11-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "captureLogger",
+      "dev_ref": "一部 TC-NOUS52_DEV-11（Error だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-017 toAppError は Error でない値（文字列）も 500 INTERNAL_ERROR の固定の文言にする",
+      "result": "",
+      "note": "Hono は Error でない値の throw を onError に渡さないため、errorHandler ではなく toAppError を直接呼んで確かめる（確認事項 1）"
+    },
+    {
+      "id": "TC-UT_ADM-018",
+      "target": "toAppError（ログの水準）",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "AppError は info、入力の誤りは debug、想定外の例外は error の水準でログに出す",
+      "precondition": "なし",
+      "input": "AppError、ZodError、Error",
+      "expected": "info app_error、debug validation_error、error unexpected_error（どれも path 付き）",
+      "branches": [
+        "B11-T",
+        "B12-T",
+        "B13-F"
+      ],
+      "mock": "captureLogger",
+      "dev_ref": "一部 TC-NOUS52_DEV-11（error だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-018 AppError は info、入力の誤りは debug、想定外の例外は error の水準でログに出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-019",
+      "target": "requireAdminSession",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "値が空の Cookie は Cookie がないものとして 401 にする",
+      "precondition": "なし",
+      "input": "Cookie aisns_admin=（値が空）",
+      "expected": "401 ADMIN_UNAUTHORIZED",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS52_DEV-02（Cookie なしと知らない値）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-019 値が空の Cookie は Cookie がないものとして 401 にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-020",
+      "target": "requireAdminSession",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "DB の session_hash をそのまま Cookie に入れても通らない（Cookie の値をハッシュして探す）",
+      "precondition": "有効なセッション",
+      "input": "DB の session_hash をそのまま Cookie に入れる",
+      "expected": "401（Cookie の値を SHA-256 にして探すため、DB の値が漏れても入れない）",
+      "branches": [
+        "B19-F",
+        "B20-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-020 DB の session_hash をそのまま Cookie に入れても通らない（Cookie の値をハッシュして探す）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-021",
+      "target": "requireAdminSession",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "最終操作からちょうど 60 分のセッションは 401 にし、最終操作の時刻を更新しない",
+      "precondition": "最終操作が TEST_NOW のセッション",
+      "input": "60 分ちょうど後に要求",
+      "expected": "401 で、last_seen_at を更新しない",
+      "branches": [
+        "B20-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS52_DEV-04（findActiveSession だけで、更新しないことを見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-021 最終操作からちょうど 60 分のセッションは 401 にし、最終操作の時刻を更新しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_ADM-022",
+      "target": "deleteExpiredSessions",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "deleteExpiredSessions は作成から 8 時間ちょうど・最終操作から 60 分ちょうどのものを消し、1 ms 手前のものは残す",
+      "precondition": "作成から 8 時間ちょうど／1 ms 手前、最終操作から 60 分ちょうど／1 ms 手前の 4 件",
+      "input": "8 時間後の時刻で削除",
+      "expected": "ちょうどの 2 件を消し、1 ms 手前の 2 件を残す（findActiveSession の境界と同じ）",
+      "branches": [],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS52_DEV-05（境界から離れた値だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_ADM-022 deleteExpiredSessions は作成から 8 時間ちょうど・最終操作から 60 分ちょうどのものを消し、1 ms 手前のものは残す",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "確認事項 1：Hono は Error でない値（文字列など）の throw を onError（errorHandler）に渡さず、そのまま投げ直す。@hono/node-server では JSON でない 500 になり、エラーの本文の形（error.code など）にならない。今の管理サーバーのコードは Error 以外を投げないので影響はない。toAppError 自体は Error でない値も INTERNAL_ERROR にする（TC-UT_ADM-017）。",
+    "分岐 B3 の真（staticDir を省いて apps/admin/dist を使う）は、画面のビルドの有無に結果が左右されるため単体テストでは通さない。B4・B5 は一時ディレクトリで確かめている。",
+    "context.ts は型だけで実行されるコードがないため、ケースを作らない（型の誤りは pnpm typecheck で見る）。"
+  ]
+}

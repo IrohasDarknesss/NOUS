@@ -1,0 +1,1146 @@
+{
+  "title": "管理者の認証（auth・cli）",
+  "ticket": "NOUS-91",
+  "author": "Jane Doe（テスト担当）",
+  "created_on": "2026-10-26",
+  "targets": [
+    "apps/server/src/admin/auth/authRoutes.ts",
+    "apps/server/src/admin/auth/authService.ts",
+    "apps/server/src/admin/auth/passwordHasher.ts",
+    "apps/server/src/admin/cli/setPassword.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）、Hono 4.6",
+  "test_files": [
+    "apps/server/src/admin/auth/authRoutes.test.ts（実装時、NOUS-53）",
+    "apps/server/src/admin/auth/authService.test.ts（実装時、NOUS-53）",
+    "apps/server/src/admin/auth/passwordHasher.test.ts（実装時、NOUS-53）",
+    "apps/server/src/admin/cli/setPassword.test.ts（実装時、NOUS-53）",
+    "apps/server/src/admin/auth/authRoutes.ut.test.ts（単体テストで追加）",
+    "apps/server/src/admin/auth/authService.ut.test.ts（単体テストで追加）",
+    "apps/server/src/admin/auth/passwordHasher.ut.test.ts（単体テストで追加）",
+    "apps/server/src/admin/cli/setPassword.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "SQLite（一時 DB）",
+    "Clock（FakeClock）",
+    "node:crypto（scrypt・randomBytes）",
+    "node:readline（PassThrough で差し替え）",
+    "process.env（setPasswordCli は env を引数で差し替え）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 admin_auth 2章 POST /admin/api/login・logout・GET /admin/api/session",
+    "BE 詳細設計 admin_auth 3章・4章 login・isLocked・registerFailure・createSession・getSessionInfo・hashPassword・verifyPassword・setPasswordCli、6章",
+    "基本設計書 概要 8章（機密情報管理）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "locked_until がない",
+      "location": "auth/authService.ts:60"
+    },
+    {
+      "id": "B2",
+      "condition": "locked_until > now",
+      "location": "auth/authService.ts:61"
+    },
+    {
+      "id": "B3",
+      "condition": "失敗の数が 5 以上（ロックする）",
+      "location": "auth/authService.ts:69"
+    },
+    {
+      "id": "B4",
+      "condition": "!admin（パスワード未設定）",
+      "location": "auth/authService.ts:114"
+    },
+    {
+      "id": "B5",
+      "condition": "ロック中",
+      "location": "auth/authService.ts:119"
+    },
+    {
+      "id": "B6",
+      "condition": "!verified（照合の失敗）",
+      "location": "auth/authService.ts:130"
+    },
+    {
+      "id": "B7",
+      "condition": "findAdmin(tx) がない（?? admin）",
+      "location": "auth/authService.ts:132"
+    },
+    {
+      "id": "B8",
+      "condition": "作成 + 8 時間 < 今 + 60 分（8 時間の側を返す）",
+      "location": "auth/authService.ts:192"
+    },
+    {
+      "id": "B9",
+      "condition": "parts.length !== 6",
+      "location": "auth/passwordHasher.ts:47"
+    },
+    {
+      "id": "B10",
+      "condition": "scheme が scrypt でない・空の部分がある",
+      "location": "auth/passwordHasher.ts:49"
+    },
+    {
+      "id": "B11",
+      "condition": "N・r・p が数字だけでない",
+      "location": "auth/passwordHasher.ts:52"
+    },
+    {
+      "id": "B12",
+      "condition": "N・r・p が 16384・8・1 と違う",
+      "location": "auth/passwordHasher.ts:58"
+    },
+    {
+      "id": "B13",
+      "condition": "ソルト・ハッシュが正しい Base64 でない・長さが違う",
+      "location": "auth/passwordHasher.ts:23-25・63"
+    },
+    {
+      "id": "B14",
+      "condition": "scrypt の計算で例外（catch）",
+      "location": "auth/passwordHasher.ts:70"
+    },
+    {
+      "id": "B15",
+      "condition": "本文が JSON として読めない（{} にする）",
+      "location": "auth/authRoutes.ts:33"
+    },
+    {
+      "id": "B16",
+      "condition": "admin_account がない（GET /session の ADMIN_NOT_SET）",
+      "location": "auth/authRoutes.ts:21"
+    },
+    {
+      "id": "B17",
+      "condition": "2 回の入力が違う",
+      "location": "cli/setPassword.ts:25"
+    },
+    {
+      "id": "B18",
+      "condition": "12 字未満",
+      "location": "cli/setPassword.ts:28"
+    },
+    {
+      "id": "B19",
+      "condition": "128 字を超える",
+      "location": "cli/setPassword.ts:31"
+    },
+    {
+      "id": "B20",
+      "condition": "admin_account がない（INSERT）",
+      "location": "cli/setPassword.ts:55"
+    },
+    {
+      "id": "B21",
+      "condition": "io の各項目が未指定（実物の標準入出力・process.env を使う）",
+      "location": "cli/setPassword.ts:178-180・189-190"
+    },
+    {
+      "id": "B22",
+      "condition": "入力の検証の失敗（終了コード 1）",
+      "location": "cli/setPassword.ts:184"
+    },
+    {
+      "id": "B23",
+      "condition": "待つ前に行が届いている（lineQueue から返す）",
+      "location": "cli/setPassword.ts:146"
+    },
+    {
+      "id": "B24",
+      "condition": "待つ前に入力が終わっている（abortedError）",
+      "location": "cli/setPassword.ts:151"
+    },
+    {
+      "id": "B25",
+      "condition": "Ctrl+C（SIGINT）で終わった（偽は入力の終了）",
+      "location": "cli/setPassword.ts:120-133"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS53_DEV-01",
+      "target": "hashPassword",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "hashPassword が scrypt$16384$8$1$<16バイトBase64>$<64バイトBase64> の文字列を返し、毎回ソルトが変わる",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "hashPassword が scrypt$16384$8$1$<16バイトBase64>$<64バイトBase64> の文字列を返し、毎回ソルトが変わる",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-01 hashPassword が scrypt$16384$8$1$<16バイトBase64>$<64バイトBase64> の文字列を返し、毎回ソルトが変わる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-02",
+      "target": "verifyPassword",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "verifyPassword が一致するパスワードで true、違うパスワードで false を返す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "verifyPassword が一致するパスワードで true、違うパスワードで false を返す",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B11-F",
+        "B12-F",
+        "B13-F",
+        "B14-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-02 verifyPassword が一致するパスワードで true、違うパスワードで false を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-03",
+      "target": "verifyPassword",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "verifyPassword は stored の形式が不正なら例外にせず false を返す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "verifyPassword は stored の形式が不正なら例外にせず false を返す",
+      "branches": [
+        "B9-T",
+        "B10-T",
+        "B11-T",
+        "B12-T",
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-03 verifyPassword は stored の形式が不正なら例外にせず false を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-04",
+      "target": "login",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "login は admin_account がなければ 409 ADMIN_NOT_SET を投げる",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "login は admin_account がなければ 409 ADMIN_NOT_SET を投げる",
+      "branches": [
+        "B4-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-04 login は admin_account がなければ 409 ADMIN_NOT_SET を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-05",
+      "target": "login",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "login の成功で failed_count と locked_until を初期化し、セッションと admin.login の監査を残す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "login の成功で failed_count と locked_until を初期化し、セッションと admin.login の監査を残す",
+      "branches": [
+        "B4-F",
+        "B5-F",
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-05 login の成功で failed_count と locked_until を初期化し、セッションと admin.login の監査を残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-06",
+      "target": "login / registerFailure",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "login の失敗で failed_count を +1 し、admin.login_failed の監査を残して 401 LOGIN_FAILED を投げる",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "login の失敗で failed_count を +1 し、admin.login_failed の監査を残して 401 LOGIN_FAILED を投げる",
+      "branches": [
+        "B3-F",
+        "B6-T",
+        "B7-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-06 login の失敗で failed_count を +1 し、admin.login_failed の監査を残して 401 LOGIN_FAILED を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-07",
+      "target": "login / registerFailure",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "5 回目の失敗で locked_until=現在+15分・failed_count=0 にし、その回は LOGIN_FAILED、次の要求から 429 LOGIN_LOCKED（JST の HH:MM と lockedUntil）、15 分後に解除される",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "5 回目の失敗で locked_until=現在+15分・failed_count=0 にし、その回は LOGIN_FAILED、次の要求から 429 LOGIN_LOCKED（JST の HH:MM と lockedUntil）、15 分後に解除される",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B2-F",
+        "B3-T",
+        "B5-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-07 5 回目の失敗で locked_until=現在+15分・failed_count=0 にし、その回は LOGIN_FAILED、次の要求から 429 LOGIN_LOCKED（JST の HH:MM と lockedUntil）、15 分後に解除される",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-08",
+      "target": "isLocked / registerFailure / createSession",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "isLocked・registerFailure・createSession が単体で仕様どおりに動く",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "isLocked・registerFailure・createSession が単体で仕様どおりに動く",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B2-F",
+        "B3-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-08 isLocked・registerFailure・createSession が単体で仕様どおりに動く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-09",
+      "target": "logout",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "logout がセッションの行を削除し、admin.logout の監査を残す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "logout がセッションの行を削除し、admin.logout の監査を残す",
+      "branches": [],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-09 logout がセッションの行を削除し、admin.logout の監査を残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-10",
+      "target": "getSessionInfo",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "getSessionInfo が min(created_at+8時間, 現在+60分) を expiresAt として返す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "getSessionInfo が min(created_at+8時間, 現在+60分) を expiresAt として返す",
+      "branches": [
+        "B8-T",
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-10 getSessionInfo が min(created_at+8時間, 現在+60分) を expiresAt として返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-11",
+      "target": "POST /admin/api/login",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "POST /admin/api/login が成功で Set-Cookie と { displayName, csrfToken } を 200 で返し、監査を残す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "POST /admin/api/login が成功で Set-Cookie と { displayName, csrfToken } を 200 で返し、監査を残す",
+      "branches": [
+        "B15-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-11 POST /admin/api/login が成功で Set-Cookie と { displayName, csrfToken } を 200 で返し、監査を残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-12",
+      "target": "POST /admin/api/login",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "POST /admin/api/login は password が 12 字未満・129 字以上なら 400 VALIDATION_ERROR",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "POST /admin/api/login は password が 12 字未満・129 字以上なら 400 VALIDATION_ERROR",
+      "branches": [
+        "B15-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-12 POST /admin/api/login は password が 12 字未満・129 字以上なら 400 VALIDATION_ERROR",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-13",
+      "target": "POST /admin/api/login",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "POST /admin/api/login はパスワード未設定なら 409 ADMIN_NOT_SET、不一致なら 401、ロック中なら 429",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "POST /admin/api/login はパスワード未設定なら 409 ADMIN_NOT_SET、不一致なら 401、ロック中なら 429",
+      "branches": [
+        "B4-T",
+        "B5-T",
+        "B6-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-13 POST /admin/api/login はパスワード未設定なら 409 ADMIN_NOT_SET、不一致なら 401、ロック中なら 429",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-14",
+      "target": "POST /admin/api/logout",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "POST /admin/api/logout が 204 と Cookie 削除ヘッダーを返し、セッション行を削除して監査を残す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "POST /admin/api/logout が 204 と Cookie 削除ヘッダーを返し、セッション行を削除して監査を残す",
+      "branches": [],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-14 POST /admin/api/logout が 204 と Cookie 削除ヘッダーを返し、セッション行を削除して監査を残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-15",
+      "target": "POST /admin/api/logout",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "POST /admin/api/logout は CSRF トークンがなければ 403 CSRF_INVALID、セッションがなければ 401",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "POST /admin/api/logout は CSRF トークンがなければ 403 CSRF_INVALID、セッションがなければ 401",
+      "branches": [],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-15 POST /admin/api/logout は CSRF トークンがなければ 403 CSRF_INVALID、セッションがなければ 401",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-16",
+      "target": "GET /admin/api/session",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "GET /admin/api/session は有効なセッションで 200 と { displayName, csrfToken, expiresAt } を返し、last_seen_at を更新する",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "GET /admin/api/session は有効なセッションで 200 と { displayName, csrfToken, expiresAt } を返し、last_seen_at を更新する",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-16 GET /admin/api/session は有効なセッションで 200 と { displayName, csrfToken, expiresAt } を返し、last_seen_at を更新する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-17",
+      "target": "GET /admin/api/session",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "GET /admin/api/session はパスワード未設定なら Cookie なしでも 409 ADMIN_NOT_SET、設定済みで Cookie なしなら 401 ADMIN_UNAUTHORIZED",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "GET /admin/api/session はパスワード未設定なら Cookie なしでも 409 ADMIN_NOT_SET、設定済みで Cookie なしなら 401 ADMIN_UNAUTHORIZED",
+      "branches": [
+        "B16-T",
+        "B16-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-17 GET /admin/api/session はパスワード未設定なら Cookie なしでも 409 ADMIN_NOT_SET、設定済みで Cookie なしなら 401 ADMIN_UNAUTHORIZED",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-18",
+      "target": "setAdminPassword",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "setAdminPassword は admin_account がなければ新規作成（ULID・Kaine Yamashiro）する",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "setAdminPassword は admin_account がなければ新規作成（ULID・Kaine Yamashiro）する",
+      "branches": [
+        "B20-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-18 setAdminPassword は admin_account がなければ新規作成（ULID・Kaine Yamashiro）する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-19",
+      "target": "setAdminPassword",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "setAdminPassword は既存の admin_account を更新し、failed_count=0・locked_until=NULL に戻して全セッションを削除する",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "setAdminPassword は既存の admin_account を更新し、failed_count=0・locked_until=NULL に戻して全セッションを削除する",
+      "branches": [
+        "B20-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-19 setAdminPassword は既存の admin_account を更新し、failed_count=0・locked_until=NULL に戻して全セッションを削除する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-20",
+      "target": "validatePasswordInput / setPasswordCli",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "validatePasswordInput と setPasswordCli が不一致・12字未満・129字以上を拒み、終了コード 1 とエラーメッセージ（パスワード値を含まない）を返す",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "validatePasswordInput と setPasswordCli が不一致・12字未満・129字以上を拒み、終了コード 1 とエラーメッセージ（パスワード値を含まない）を返す",
+      "branches": [
+        "B17-T",
+        "B17-F",
+        "B18-T",
+        "B18-F",
+        "B19-T",
+        "B19-F",
+        "B21-F",
+        "B22-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-20 validatePasswordInput と setPasswordCli が不一致・12字未満・129字以上を拒み、終了コード 1 とエラーメッセージ（パスワード値を含まない）を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-21",
+      "target": "setPasswordCli / readTwoPasswordsHidden",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "setPasswordCli が正常入力で DB に保存して終了コード 0 を返し、readTwoPasswordsHidden は入力文字をエコーしない",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "setPasswordCli が正常入力で DB に保存して終了コード 0 を返し、readTwoPasswordsHidden は入力文字をエコーしない",
+      "branches": [
+        "B21-F",
+        "B22-F",
+        "B23-F",
+        "B24-F"
+      ],
+      "mock": "一時 DB（createTestDb）",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-21 setPasswordCli が正常入力で DB に保存して終了コード 0 を返し、readTwoPasswordsHidden は入力文字をエコーしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-22",
+      "target": "readTwoPasswordsHidden",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "readTwoPasswordsHidden は Ctrl+C（\\\\u0003）が押されたら rl を閉じて reject する",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "readTwoPasswordsHidden は Ctrl+C（\\\\u0003）が押されたら rl を閉じて reject する",
+      "branches": [
+        "B24-F",
+        "B25-T"
+      ],
+      "mock": "PassThrough の入出力",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-22 readTwoPasswordsHidden は Ctrl+C（\\\\u0003）が押されたら rl を閉じて reject する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS53_DEV-23",
+      "target": "readTwoPasswordsHidden",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "readTwoPasswordsHidden は入力が途中で終了（input.end()）したら reject する",
+      "precondition": "なし",
+      "input": "テストコードのとおり",
+      "expected": "readTwoPasswordsHidden は入力が途中で終了（input.end()）したら reject する",
+      "branches": [
+        "B23-F",
+        "B25-F"
+      ],
+      "mock": "PassThrough の入出力",
+      "dev_ref": "実装時のテスト（NOUS-53）",
+      "suspect": "",
+      "test_name": "TC-NOUS53_DEV-23 readTwoPasswordsHidden は入力が途中で終了（input.end()）したら reject する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-001",
+      "target": "verifyPassword",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "保存の形が少しでも違えば、正しいパスワードでも例外にせず false",
+      "precondition": "正しいパスワードのハッシュ",
+      "input": "r・p が違う、7 つに分かれる、ソルトのパディングを欠く、ハッシュの前に空白",
+      "expected": "どれも例外にせず false",
+      "branches": [
+        "B9-T",
+        "B12-T",
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS53_DEV-03（N の違い・字数の違いなど。r・p・パディング・空白は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-001 保存の形が少しでも違えば、正しいパスワードでも例外にせず false",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-002",
+      "target": "hashPassword / verifyPassword",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "日本語と絵文字を含むパスワードもハッシュして照合できる",
+      "precondition": "なし",
+      "input": "日本語と絵文字を含む 16 字",
+      "expected": "同じ値で true、末尾の 1 字が違えば false",
+      "branches": [
+        "B13-F",
+        "B14-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS53_DEV-02（ASCII だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-002 日本語と絵文字を含むパスワードもハッシュして照合できる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-003",
+      "target": "verifyPassword",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "前後の空白・大文字小文字の違いは別のパスワードとする",
+      "precondition": "正しいパスワードのハッシュ",
+      "input": "先頭に空白、大文字にした値",
+      "expected": "どちらも false（そのまま比べる）",
+      "branches": [
+        "B14-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-003 前後の空白・大文字小文字の違いは別のパスワードとする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-004",
+      "target": "isLocked",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "isLocked は locked_until が今より後のときだけ真",
+      "precondition": "なし",
+      "input": "locked_until = null、今と同じ、今の 1 ms 後",
+      "expected": "今の 1 ms 後だけ true",
+      "branches": [
+        "B1-T",
+        "B1-F",
+        "B2-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS53_DEV-08（境界のちょうどを見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-004 isLocked は locked_until が今より後のときだけ真",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-005",
+      "target": "registerFailure",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "4 回目の失敗ではロックせず、failed_count を 4 にする",
+      "precondition": "failed_count = 3",
+      "input": "失敗を 1 回",
+      "expected": "{ locked: false }、failed_count = 4、locked_until は null",
+      "branches": [
+        "B3-F"
+      ],
+      "mock": "一時 DB（createTestDb）",
+      "dev_ref": "一部 TC-NOUS53_DEV-06（0 → 1 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-005 4 回目の失敗ではロックせず、failed_count を 4 にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-006",
+      "target": "login",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "ロック中は正しいパスワードでも 429 にし、照合も失敗の数え上げも監査もしない",
+      "precondition": "locked_until = 今 + 10 分",
+      "input": "正しいパスワード",
+      "expected": "429 LOGIN_LOCKED。failed_count・locked_until は変わらず、監査もセッションも作らない",
+      "branches": [
+        "B4-F",
+        "B5-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-07（違うパスワードで 429 になることだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-006 ロック中は正しいパスワードでも 429 にし、照合も失敗の数え上げも監査もしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-007",
+      "target": "login",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "locked_until ちょうどの時刻には正しいパスワードで入れ、ロックを解く",
+      "precondition": "locked_until = 今（ちょうど）",
+      "input": "正しいパスワード",
+      "expected": "成功し、failed_count = 0・locked_until = null",
+      "branches": [
+        "B5-F",
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-07（15 分より後で解除されることだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-007 locked_until ちょうどの時刻には正しいパスワードで入れ、ロックを解く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-008",
+      "target": "login",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "ロックが明けたあとの 1 回の失敗では、すぐにはロックしない（数え直しは 1 から）",
+      "precondition": "failed_count = 0、locked_until = 今の 1 ms 前（ロック明け）",
+      "input": "違うパスワード",
+      "expected": "401 LOGIN_FAILED、failed_count = 1 でロックしない",
+      "branches": [
+        "B5-F",
+        "B6-T",
+        "B3-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-008 ロックが明けたあとの 1 回の失敗では、すぐにはロックしない（数え直しは 1 から）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-009",
+      "target": "login（LOGIN_LOCKED の文言）",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "解除の時刻は JST の HH:MM で、日付をまたぐときも 0 時台で表す",
+      "precondition": "locked_until = 2026-10-19T15:05:00Z、今は 14:55Z",
+      "input": "正しいパスワード",
+      "expected": "message は「…、00:05 まで受け付けません」（JST で日付をまたぐ）、fields.lockedUntil は保存の値",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（2026-10-19T14:55:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-07（日付をまたがない時刻だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-009 解除の時刻は JST の HH:MM で、日付をまたぐときも 0 時台で表す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-010",
+      "target": "login",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "成功したら、それまでの失敗の数を 0 に戻す",
+      "precondition": "failed_count = 3",
+      "input": "正しいパスワード",
+      "expected": "failed_count = 0、監査は admin.login だけ",
+      "branches": [
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-05（0 からの成功だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-010 成功したら、それまでの失敗の数を 0 に戻す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-011",
+      "target": "login / createSession",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "続けてログインするとセッションが別々にでき、どちらも session_hash は sessionId の SHA-256",
+      "precondition": "なし",
+      "input": "続けて 2 回ログイン",
+      "expected": "sessionId が別々で、admin_sessions の session_hash はそれぞれの SHA-256（2 行）",
+      "branches": [
+        "B6-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-08（1 回だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-011 続けてログインするとセッションが別々にでき、どちらも session_hash は sessionId の SHA-256",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-012",
+      "target": "logout",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "logout は指定のセッションだけを消し、ほかのセッションは残す",
+      "precondition": "セッション 2 つ",
+      "input": "片方の session_hash で logout",
+      "expected": "そのセッションだけを消し、もう 1 つは残す",
+      "branches": [],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-09（セッション 1 つだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-012 logout は指定のセッションだけを消し、ほかのセッションは残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-013",
+      "target": "getSessionInfo",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "getSessionInfo の expiresAt は 8 時間と 60 分の早いほう",
+      "precondition": "なし",
+      "input": "作成から 7 時間（両方が同じ）・7 時間半・30 分",
+      "expected": "7 時間・7 時間半：作成 + 8 時間、30 分：今 + 60 分",
+      "branches": [
+        "B8-T",
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS53_DEV-10（両方が同じ時刻の境界を見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-013 getSessionInfo の expiresAt は 8 時間と 60 分の早いほう",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-014",
+      "target": "login / registerFailure",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "ロックの期間は 15 分で、5 回目の失敗の時刻から数える",
+      "precondition": "failed_count = 4、時計を 3 分進める",
+      "input": "違うパスワード",
+      "expected": "locked_until = 5 回目の失敗の時刻 + 15 分",
+      "branches": [
+        "B3-T",
+        "B6-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-07（時計を進めずに確かめている）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-014 ロックの期間は 15 分で、5 回目の失敗の時刻から数える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-015",
+      "target": "POST /admin/api/login",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "本文が読めない・password が文字列でないときは 400 で「パスワードを入力してください」",
+      "precondition": "なし",
+      "input": "JSON でない本文、空の本文、password が数値",
+      "expected": "どれも 400 VALIDATION_ERROR、fields.password は「パスワードを入力してください」",
+      "branches": [
+        "B15-T",
+        "B15-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "なし（DEV-12 は字数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-015 本文が読めない・password が文字列でないときは 400 で「パスワードを入力してください」",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-016",
+      "target": "POST /admin/api/login",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "12 字・128 字は検証を通り、照合の結果（401）になる",
+      "precondition": "なし",
+      "input": "password が 12 字・128 字（違う値）",
+      "expected": "検証を通り、照合の結果の 401 LOGIN_FAILED",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-12（11 字・129 字だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-016 12 字・128 字は検証を通り、照合の結果（401）になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-017",
+      "target": "GET /admin/api/session",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "最終操作から 60 分たったセッションで GET /session は 401",
+      "precondition": "ログイン直後のセッション",
+      "input": "60 分ちょうど後に GET /session",
+      "expected": "401",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-17（Cookie なしだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-017 最終操作から 60 分たったセッションで GET /session は 401",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-018",
+      "target": "POST /admin/api/logout → GET /admin/api/session",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "logout したあとは同じ Cookie で GET /session が 401 になる",
+      "precondition": "ログイン済み",
+      "input": "logout のあと、同じ Cookie で GET /session",
+      "expected": "logout は 204、そのあとの GET /session は 401",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-14（行が消えることだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-018 logout したあとは同じ Cookie で GET /session が 401 になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-019",
+      "target": "GET /admin/api/session",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "GET /session は呼ぶたびに expiresAt を今から 60 分後に延ばす",
+      "precondition": "ログイン直後のセッション",
+      "input": "30 分後に GET /session",
+      "expected": "expiresAt = 今（30 分後）+ 60 分",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-16（ログインの直後だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-019 GET /session は呼ぶたびに expiresAt を今から 60 分後に延ばす",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-020",
+      "target": "validatePasswordInput",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "validatePasswordInput の長さの境界",
+      "precondition": "なし",
+      "input": "12 字・128 字・11 字・129 字・「あ」12 字（2 回とも同じ）",
+      "expected": "12・128・日本語 12 字は ok、11・129 は ng",
+      "branches": [
+        "B17-F",
+        "B18-T",
+        "B18-F",
+        "B19-T",
+        "B19-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS53_DEV-20（11 字・129 字だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-020 validatePasswordInput の長さの境界",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-021",
+      "target": "validatePasswordInput",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "2 回の入力が違えば、長さより先に「一致しません」を返す",
+      "precondition": "なし",
+      "input": "\"short\" と \"other\"（不一致で、どちらも短い）",
+      "expected": "「パスワードが一致しません」（長さより先に一致を確かめる）",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS53_DEV-20（長さが十分な不一致だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-021 2 回の入力が違えば、長さより先に「一致しません」を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-022",
+      "target": "setAdminPassword → login",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "パスワードを設定し直すと、新しいパスワードで入れて、古いパスワードでは入れない",
+      "precondition": "古いパスワードで設定済み",
+      "input": "新しいパスワードで設定し直す",
+      "expected": "created は false、新しいパスワードで入れ、古いパスワードは 401",
+      "branches": [
+        "B20-F"
+      ],
+      "mock": "一時 DB（createTestDb）、FakeClock（TEST_NOW = 2026-10-20T00:00:00.000Z）",
+      "dev_ref": "一部 TC-NOUS53_DEV-19（ハッシュの更新だけで、ログインできるかは見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-022 パスワードを設定し直すと、新しいパスワードで入れて、古いパスワードでは入れない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-023",
+      "target": "setPasswordCli",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "入力の検証に失敗したら DB のファイルを作らずに終了コード 1 を返す",
+      "precondition": "一時ディレクトリ",
+      "input": "11 字未満の入力、AISNS_DB_PATH は未作成のファイル",
+      "expected": "終了コード 1、標準エラーに「12 字以上」、DB のファイルを作らない",
+      "branches": [
+        "B18-T",
+        "B22-T"
+      ],
+      "mock": "readPasswords・stderr を差し替え、一時ディレクトリ（mkdtemp）",
+      "dev_ref": "一部 TC-NOUS53_DEV-20（ファイルを作らないことは見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-023 入力の検証に失敗したら DB のファイルを作らずに終了コード 1 を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-024",
+      "target": "setPasswordCli",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "環境変数が不正なら ConfigError で止まり、DB のファイルを作らない",
+      "precondition": "一時ディレクトリ",
+      "input": "正しい入力、AISNS_ADMIN_PORT = abc",
+      "expected": "ConfigError で reject し、文言にパスワードを含めず、DB のファイルを作らない",
+      "branches": [
+        "B22-F"
+      ],
+      "mock": "readPasswords を差し替え、一時ディレクトリ（mkdtemp）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-024 環境変数が不正なら ConfigError で止まり、DB のファイルを作らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-025",
+      "target": "readTwoPasswordsHidden",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "2 行がまとめて届いても、1 行目と 2 行目に分けて返し、プロンプトを 2 回出す",
+      "precondition": "なし",
+      "input": "2 行を 1 回でまとめて書く",
+      "expected": "1 行目と 2 行目に分けて返し、2 つのプロンプトを出す",
+      "branches": [
+        "B23-T"
+      ],
+      "mock": "PassThrough の入出力",
+      "dev_ref": "一部 TC-NOUS53_DEV-21（エコーしないことだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-025 2 行がまとめて届いても、1 行目と 2 行目に分けて返し、プロンプトを 2 回出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AUTH-026",
+      "target": "readTwoPasswordsHidden",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "何も入力せずに入力が終わったら、1 行目の前で reject する",
+      "precondition": "なし",
+      "input": "何も書かずに input.end()",
+      "expected": "「パスワードの入力が途中で終了しました」で reject",
+      "branches": [
+        "B24-T",
+        "B25-F"
+      ],
+      "mock": "PassThrough の入出力",
+      "dev_ref": "一部 TC-NOUS53_DEV-23（1 行目のあとで終わるときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AUTH-026 何も入力せずに入力が終わったら、1 行目の前で reject する",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "確認事項 1：login は scrypt の照合をトランザクションの外で先に行う（実装のコメントのとおり）。設計書 2章は「手順 3〜5 は1つのトランザクション」としているが、ロックの判定は照合の前に読んだ行で行うため、同時に 2 つの要求が来たとき、5 回目の失敗と同じ瞬間の正しいパスワードの要求は通りうる。管理者は 1 名・ブラウザ 1 つの前提なので実害は小さく、疑いではなく確認事項とした。",
+    "分岐 B7 の真（トランザクションの中で admin_account が消えている）は、照合の間に管理者を消す操作がないため通らない守りの分岐。B14 の真（scrypt の計算の例外）は、パラメータを 16384・8・1 に固定して検証しているため通らない。",
+    "分岐 B21 の真（io を省いて実物の標準入出力・process.env を使う）は、テストで実物の端末と環境変数に触れないため通さない。CLI の起動（isMain）も同じ理由で対象外。",
+    "管理者のパスワードのハッシュがログに出ないことは、authService・setPassword がロガーを使っていないことで確かめた（NOUS-90 の確認事項 3）。"
+  ]
+}
