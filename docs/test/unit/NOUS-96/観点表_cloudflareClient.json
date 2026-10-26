@@ -161,8 +161,8 @@
     }
   ],
   "issues": [
-    "確認事項 1：toLlmError は 400・401・429 以外の 4xx（403 の権限不足、404 のモデル名の誤り、413 の本文が大きすぎるなど）を ServerError として再試行の対象にしている。設計書（generation 2章）は 400・401 を「入力や権限の問題で再試行しない」としているが、ほかの 4xx は記載がない。403・404 も繰り返して直るものではないため、再試行しない側に入れるべきかを確認したい。単体テストは実装の値（再試行する）を期待値にした（TC-UT_LLM-037）。",
-    "確認事項 2：buildRequestBody は、Gemma 4・GLM・Qwen3 以外のモデルでは思考を止める指定を何も送らない（TC-UT_LLM-029）。world_settings.model_id は DB の CHECK で Gemma 4 と Qwen3 の 2 つに限られるため、今は影響がない。モデルを足すときに見直す。"
+    "疑い 1：toLlmError は 400・401・429 以外の 4xx（403 の権限不足、404 のモデル名の誤り、413 の本文が大きすぎるなど）を ServerError にし、ServerError.retryable が 400・401 以外を真にするため、再試行の対象になっている（llmClient.ts:86、cloudflareClient.ts:109-110）。設計書（generation 2章 IF-001）は再試行の対象を timeout・429（3036 以外）・5xx に限っているので、403・404・413 は再試行しないのが仕様（2026-10-23 Kouhei Tajima 判断）。TC-UT_LLM-037 は仕様どおり「再試行しない」を期待結果にしており、実施のときに NG になる見込み。",
+    "確認事項 1：buildRequestBody は、Gemma 4・GLM・Qwen3 以外のモデルでは思考を止める指定を何も送らない（TC-UT_LLM-029）。world_settings.model_id は DB の CHECK で Gemma 4 と Qwen3 の 2 つに限られるため、今は影響がない。モデルを足すときに見直す。"
   ],
   "cases": [
     {
@@ -797,19 +797,19 @@
       "target": "toLlmError",
       "category": "異常系",
       "technique": "同値分割",
-      "viewpoint": "400・401 以外の 4xx（403・404・413）は ServerError で、再試行の対象になる",
+      "viewpoint": "400・401・429 以外の 4xx（403・404・413）は ServerError で、再試行しない",
       "precondition": "なし",
       "input": "403・404・413、errors [{ code 1000 }]",
-      "expected": "ServerError、retryable 真（実装の値）",
+      "expected": "ServerError、retryable 偽（IF-001 の再試行の対象は timeout・429（3036 以外）・5xx に限られる）",
       "branches": [
         "B7-F"
       ],
       "mock": "なし",
       "dev_ref": "なし（DEV-13 は 400・401・5xx だけ）",
-      "suspect": "",
-      "test_name": "TC-UT_LLM-037 400・401 以外の 4xx（403・404・413）は ServerError で、再試行の対象になる",
+      "suspect": "ServerError.retryable が 400・401 以外を真にするため、403・404・413 も再試行の対象になる（疑い 1）",
+      "test_name": "TC-UT_LLM-037 400・401・429 以外の 4xx（403・404・413）は ServerError で、再試行しない",
       "result": "",
-      "note": "設計書（generation 2章）は 400・401・429・5xx だけを定める。403 などの扱いは確認事項 1"
+      "note": "期待結果は BE 詳細設計 generation 2章 IF-001 の再試行の欄（2026-10-23 Kouhei Tajima 判断）"
     },
     {
       "id": "TC-UT_LLM-038",
