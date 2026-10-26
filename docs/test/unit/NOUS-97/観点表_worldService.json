@@ -1,0 +1,1061 @@
+{
+  "ticket": "NOUS-97",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-23",
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "title": "世界の状態遷移の操作（world/worldService.ts）",
+  "targets": [
+    "apps/server/src/world/worldService.ts"
+  ],
+  "test_files": [
+    "apps/server/src/world/worldService.test.ts（実装時、NOUS-57）",
+    "apps/server/src/world/worldService.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "DB（一時 DB）",
+    "時計（FakeClock）",
+    "Scheduler（SchedulerControl を差し替え）",
+    "recordAudit（差し替え）",
+    "Logger（captureLogger）"
+  ],
+  "design_refs": [
+    "基本設計書（概要）6章「状態の遷移」世界の状態",
+    "BE 詳細設計 world 2章 start・pause・resume・emergency-stop・reset",
+    "BE 詳細設計 world 3章 findCurrentWorld・countRunningEvents・copyAgentsToWorld・updateWorldState",
+    "BE 詳細設計 world 4章 startWorld〜enterLimitStopped・nextWorldName・createInitialWorld",
+    "BE 詳細設計 world 6章 トランザクション制御"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "getUsage：利用日の行がない（row ?? 0）",
+      "location": "worldService.ts:74"
+    },
+    {
+      "id": "B2",
+      "condition": "nextWorldName：「世界 YYYY-MM-DD」が使われていない",
+      "location": "worldService.ts:107"
+    },
+    {
+      "id": "B3",
+      "condition": "nextWorldName：「-n」が使われていない（ループ 1 回・複数回）",
+      "location": "worldService.ts:109-111"
+    },
+    {
+      "id": "B4",
+      "condition": "mustFindCurrentWorld：現在の世界がない",
+      "location": "worldService.ts:140"
+    },
+    {
+      "id": "B5",
+      "condition": "updateWorldState：UPDATE が 0 行",
+      "location": "worldService.ts:158"
+    },
+    {
+      "id": "B6",
+      "condition": "settleOrUpdate：world.state === 'running'",
+      "location": "worldService.ts:166"
+    },
+    {
+      "id": "B7",
+      "condition": "settleOrUpdate：settleWorldTime が null",
+      "location": "worldService.ts:167"
+    },
+    {
+      "id": "B8",
+      "condition": "runningOrLimitStopped：isWithinLimits",
+      "location": "worldService.ts:180"
+    },
+    {
+      "id": "B9",
+      "condition": "startWorld：state !== 'preparing'",
+      "location": "worldService.ts:203"
+    },
+    {
+      "id": "B10",
+      "condition": "startWorld：active のエージェントが 0 体",
+      "location": "worldService.ts:204"
+    },
+    {
+      "id": "B11",
+      "condition": "startWorld：遷移先が running",
+      "location": "worldService.ts:206"
+    },
+    {
+      "id": "B12",
+      "condition": "startWorld：running なら wake",
+      "location": "worldService.ts:230"
+    },
+    {
+      "id": "B13",
+      "condition": "stopInBackground：stopAll が reject（catch でログ）",
+      "location": "worldService.ts:192-194"
+    },
+    {
+      "id": "B14",
+      "condition": "pauseWorld：!canTransition(state, 'paused')",
+      "location": "worldService.ts:239"
+    },
+    {
+      "id": "B15",
+      "condition": "resumeWorld：state が paused・emergency_stopped 以外",
+      "location": "worldService.ts:265"
+    },
+    {
+      "id": "B16",
+      "condition": "resumeWorld：!canTransition(state, next.state)",
+      "location": "worldService.ts:267"
+    },
+    {
+      "id": "B17",
+      "condition": "resumeWorld：遷移先が running",
+      "location": "worldService.ts:269"
+    },
+    {
+      "id": "B18",
+      "condition": "resumeWorld：next_cycle_at が null でなく現在より後",
+      "location": "worldService.ts:276"
+    },
+    {
+      "id": "B19",
+      "condition": "resumeWorld：running なら wake",
+      "location": "worldService.ts:293"
+    },
+    {
+      "id": "B20",
+      "condition": "emergencyStopWorld：!canTransition(state, 'emergency_stopped')",
+      "location": "worldService.ts:302"
+    },
+    {
+      "id": "B21",
+      "condition": "resetWorld：!canTransition(state, 'archived')",
+      "location": "worldService.ts:331"
+    },
+    {
+      "id": "B22",
+      "condition": "resetWorld：confirmName !== name",
+      "location": "worldService.ts:332"
+    },
+    {
+      "id": "B23",
+      "condition": "resetWorld：status=running の生成イベントがある",
+      "location": "worldService.ts:333"
+    },
+    {
+      "id": "B24",
+      "condition": "enterLimitStopped：世界がない、または running でない",
+      "location": "worldService.ts:373"
+    },
+    {
+      "id": "B25",
+      "condition": "enterLimitStopped：遷移したら stopAll('limit')",
+      "location": "worldService.ts:376"
+    },
+    {
+      "id": "B26",
+      "condition": "interestProfileOf：旧の interest_profile の記憶がある",
+      "location": "worldService.ts:422"
+    }
+  ],
+  "issues": [
+    "確認事項 1：B5-T・B7-T（楽観の確認で 0 行）は、同期のトランザクションの中で読んでから書くため、公開の関数からは起こせない。settleWorldTime 単体の 0 行は 観点表_rules.json の TC-UT_WLD-014 で確かめた",
+    "確認事項 2：B16-T（resumeWorld の canTransition が偽）は、paused・emergency_stopped から running・limit_stopped への 4 組がすべて表にあるため通らない。防御のための分岐とみなした",
+    "確認事項 3：limitReason ?? 'neurons_limit'（worldService.ts:181）の右辺は、上限の外なら limitReason が必ず理由を返すため通らない",
+    "確認事項 4：resetWorld は停止中（stopped）のエージェントも active にして写す（world.md 2章 reset の手順 4「state は active」のとおり）。TC-NOUS57_DEV-29 で確かめている"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS57_DEV-15",
+      "target": "createInitialWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "準備中の世界と既定の world_settings を作る",
+      "precondition": "FakeClock 2026-10-22T00:00:00.000Z、世界なし",
+      "input": "tx、now",
+      "expected": "preparing・「世界 2026-10-22」、上限 9,500・480",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-15 準備中の世界と既定の world_settings を作る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-16",
+      "target": "nextWorldName",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "同名の世界があれば -2、-3 と番号を足す",
+      "precondition": "「世界 2026-10-22」（archived）、その後「-2」も archived",
+      "input": "date 2026-10-22",
+      "expected": "「世界 2026-10-22-2」、次は「-3」",
+      "branches": [
+        "B2-F",
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-16 同名の世界があれば -2、-3 と番号を足す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-17",
+      "target": "startWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "準備中で上限の中なら running にし、監査を残して wake する",
+      "precondition": "準備中、active 1 体、利用量なし",
+      "input": "admin",
+      "expected": "{ state: running, startedAt }、running_since・heartbeat_at・next_cycle_at は現在、監査 world.start、wake 1 回",
+      "branches": [
+        "B4-F",
+        "B9-F",
+        "B10-F",
+        "B8-T",
+        "B11-T",
+        "B12-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-17 準備中で上限の中なら running にし、監査を残して wake する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-18",
+      "target": "startWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "上限に達していれば limit_stopped と理由（wake しない）",
+      "precondition": "準備中、active 1 体、Neurons 9,500",
+      "input": "admin",
+      "expected": "limit_stopped・neurons_limit、running_since null、wake なし",
+      "branches": [
+        "B1-F",
+        "B8-F",
+        "B11-F",
+        "B12-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-18 上限に達していれば limit_stopped と理由（wake しない）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-19",
+      "target": "startWorld",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "active のエージェントが 0 体なら NO_AGENTS",
+      "precondition": "準備中、stopped 1 体",
+      "input": "admin",
+      "expected": "AppError NO_AGENTS、状態は preparing、監査なし",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-19 active のエージェントが0体なら NO_AGENTS",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-20",
+      "target": "startWorld",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "準備中以外なら STATE_CONFLICT",
+      "precondition": "running",
+      "input": "admin",
+      "expected": "AppError STATE_CONFLICT",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-20 準備中以外なら STATE_CONFLICT",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-21",
+      "target": "pauseWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running から一時停止し、世界内時間を確定して stopAll('pause') を呼ぶ",
+      "precondition": "running、90.5 秒経過",
+      "input": "admin",
+      "expected": "{ paused, worldTimeSec 90, runningGenerations 0 }、running_since null、manual_pause、stopAll('pause')",
+      "branches": [
+        "B14-F",
+        "B6-T",
+        "B7-F",
+        "B13-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-21 running から一時停止し、世界内時間を確定して stopAll('pause') を呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-22",
+      "target": "pauseWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "limit_stopped からも一時停止でき、世界内時間は変わらない",
+      "precondition": "limit_stopped（runs_limit）",
+      "input": "admin",
+      "expected": "worldTimeSec 0、paused",
+      "branches": [
+        "B14-F",
+        "B6-F",
+        "B5-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-22 limit_stopped からも一時停止でき、世界内時間は変わらない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-23",
+      "target": "pauseWorld",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "preparing・paused・emergency_stopped からは STATE_CONFLICT",
+      "precondition": "各状態",
+      "input": "admin",
+      "expected": "AppError STATE_CONFLICT",
+      "branches": [
+        "B14-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-23 preparing・paused・emergency_stopped からは STATE_CONFLICT",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-24",
+      "target": "resumeWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "paused から再開し、next_cycle_at は max(現在, 既存の予定)",
+      "precondition": "paused、next_cycle_at 00:20（未来）→ 1 時間後に再度",
+      "input": "admin",
+      "expected": "running・stopReason null、1 回目は 00:20 のまま、2 回目は現在、wake",
+      "branches": [
+        "B15-F",
+        "B16-F",
+        "B17-T",
+        "B18-T",
+        "B18-F",
+        "B19-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-24 paused から再開し、next_cycle_at は max(現在, 既存の予定)",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-25",
+      "target": "resumeWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "上限に達していれば limit_stopped と理由",
+      "precondition": "emergency_stopped、実行回数 480",
+      "input": "admin",
+      "expected": "{ limit_stopped, runs_limit }、running_since null",
+      "branches": [
+        "B17-F",
+        "B19-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-25 上限に達していれば limit_stopped と理由",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-26",
+      "target": "resumeWorld",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "preparing・running・limit_stopped からは STATE_CONFLICT",
+      "precondition": "各状態",
+      "input": "admin",
+      "expected": "AppError STATE_CONFLICT",
+      "branches": [
+        "B15-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-26 preparing・running・limit_stopped からは STATE_CONFLICT",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-27",
+      "target": "emergencyStopWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running から緊急停止し、世界内時間を確定して取り消した件数を返す",
+      "precondition": "running、30 秒経過、stopAll → 2",
+      "input": "admin",
+      "expected": "{ emergency_stopped, cancelledGenerations 2 }、確定分 30、emergency",
+      "branches": [
+        "B20-F",
+        "B6-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-27 running から緊急停止し、世界内時間を確定して取り消した件数を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-28",
+      "target": "emergencyStopWorld",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "preparing・emergency_stopped からは STATE_CONFLICT",
+      "precondition": "各状態",
+      "input": "admin",
+      "expected": "STATE_CONFLICT で reject",
+      "branches": [
+        "B20-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-28 preparing・emergency_stopped からは STATE_CONFLICT",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-29",
+      "target": "resetWorld",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "一時停止の世界をアーカイブにし、設定とエージェントを写した準備中の世界を作る",
+      "precondition": "paused、active・stopped の 2 体、cycle_minutes 30",
+      "input": "admin、confirmName「世界 2026-10-22」",
+      "expected": "旧は archived、新は「-2」で preparing、設定を写す、エージェントは active で写し記憶もある、監査 world.reset",
+      "branches": [
+        "B21-F",
+        "B22-F",
+        "B23-F",
+        "B26-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-29 一時停止の世界をアーカイブにし、設定とエージェントを写した準備中の世界を作る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-30",
+      "target": "resetWorld",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "準備中・稼働はリセットできない（STATE_CONFLICT）",
+      "precondition": "preparing、running",
+      "input": "admin、正しい名前",
+      "expected": "AppError STATE_CONFLICT、世界は変わらない",
+      "branches": [
+        "B21-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-30 準備中・稼働はリセットできない（STATE_CONFLICT）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-31",
+      "target": "resetWorld",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "confirmName が違えば CONFIRM_MISMATCH",
+      "precondition": "paused",
+      "input": "confirmName「世界 2026-10-21」",
+      "expected": "AppError CONFIRM_MISMATCH、paused のまま",
+      "branches": [
+        "B22-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-31 confirmName が違えば CONFIRM_MISMATCH",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-32",
+      "target": "resetWorld",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "実行中の生成が残っていれば GENERATION_RUNNING",
+      "precondition": "paused、status=running の生成イベント 1 件",
+      "input": "admin、正しい名前",
+      "expected": "AppError GENERATION_RUNNING",
+      "branches": [
+        "B23-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-32 実行中の生成が残っていれば GENERATION_RUNNING",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-33",
+      "target": "enterLimitStopped",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running なら世界内時間を確定して limit_stopped にし、stopAll('limit') を呼ぶ（監査なし）",
+      "precondition": "running、10 秒経過",
+      "input": "free_tier_error",
+      "expected": "limit_stopped・free_tier_error・確定分 10、stopAll('limit')、監査は start の 1 件だけ",
+      "branches": [
+        "B24-F",
+        "B25-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-33 running なら世界内時間を確定して limit_stopped にし、stopAll('limit') を呼ぶ（監査なし）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS57_DEV-34",
+      "target": "enterLimitStopped",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running でなければ何もしない",
+      "precondition": "paused",
+      "input": "neurons_limit",
+      "expected": "paused のまま、stopAll なし",
+      "branches": [
+        "B24-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "実装時のテスト（NOUS-57）",
+      "suspect": "",
+      "test_name": "TC-NOUS57_DEV-34 running でなければ何もしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-015",
+      "target": "findCurrentWorld",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "archived の世界を現在の世界として返さない",
+      "precondition": "archived の世界 1 つだけ",
+      "input": "db",
+      "expected": "undefined",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-015 findCurrentWorld は archived の世界を返さない（archived だけなら undefined）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-016",
+      "target": "getUsage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "利用日の行がなければ neurons 0・runs 0 を返す",
+      "precondition": "daily_usage なし",
+      "input": "usageDate 2026-10-22",
+      "expected": "{ neurons: 0, runs: 0 }",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし（DEV は行があるときか、間接的にだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-016 getUsage は利用日の行がなければ neurons 0・runs 0 を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-017",
+      "target": "countRunningEvents",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "同じ世界の status=running の生成イベントだけを数える",
+      "precondition": "archived の世界に running 1 件、現在の世界に running 2 件・succeeded 1 件",
+      "input": "現在の world_id",
+      "expected": "2",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-32（1 件あるかどうかだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-017 countRunningEvents は同じ世界の status=running だけを数える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-018",
+      "target": "nextWorldName",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "番号に欠けがあれば小さい番号から使う",
+      "precondition": "「世界 2026-10-22」と「世界 2026-10-22-3」（ともに archived）",
+      "input": "date 2026-10-22",
+      "expected": "「世界 2026-10-22-2」",
+      "branches": [
+        "B2-F",
+        "B3-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-16（番号が連続しているときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-018 nextWorldName は番号に欠けがあれば小さい番号から使う",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-019",
+      "target": "nextWorldName",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "別の日付の世界は数えない",
+      "precondition": "「世界 2026-10-22」（archived）",
+      "input": "date 2026-10-23",
+      "expected": "「世界 2026-10-23」",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-019 nextWorldName は別の日付の世界を数えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-020",
+      "target": "startWorld",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "現在の世界がなければ STATE_CONFLICT",
+      "precondition": "世界なし",
+      "input": "admin",
+      "expected": "AppError STATE_CONFLICT、監査なし、wake なし",
+      "branches": [
+        "B4-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-020 現在の世界がなければ STATE_CONFLICT",
+      "result": "",
+      "note": "設計書は「世界を読み、preparing でなければ STATE_CONFLICT」。世界がないときもこれに含めた"
+    },
+    {
+      "id": "TC-UT_WLD-021",
+      "target": "startWorld",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "実行回数が上限なら preparing → limit_stopped（runs_limit）にし、started_at を入れて監査を残す",
+      "precondition": "準備中、active 1 体、実行回数 480",
+      "input": "admin",
+      "expected": "{ limit_stopped, startedAt 現在 }、stop_reason runs_limit・started_at 現在・running_since null・確定分 0、監査 before preparing / after limit_stopped、wake なし",
+      "branches": [
+        "B1-F",
+        "B8-F",
+        "B11-F",
+        "B12-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-18（neurons_limit だけで、started_at と監査は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-021 実行回数が上限に達していれば preparing → limit_stopped（runs_limit）にし、started_at を入れて監査を残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-022",
+      "target": "startWorld",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "ほかの世界の active のエージェントは数えず NO_AGENTS にする",
+      "precondition": "archived の世界に active 1 体、現在の準備中の世界は 0 体",
+      "input": "admin",
+      "expected": "AppError NO_AGENTS",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-19（同じ世界の stopped だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-022 ほかの世界の active のエージェントは数えず、NO_AGENTS にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-023",
+      "target": "pauseWorld",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "runningGenerations に、その世界の実行中の生成の数を返す",
+      "precondition": "running、status=running の生成イベント 1 件",
+      "input": "admin",
+      "expected": "runningGenerations 1",
+      "branches": [
+        "B14-F",
+        "B6-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-21（0 件だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-023 runningGenerations に、その世界の実行中の生成の数を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-024",
+      "target": "pauseWorld",
+      "category": "異常系",
+      "technique": "依存",
+      "viewpoint": "stopAll('pause') が失敗しても一時停止は成功し、error のログを出す",
+      "precondition": "running、stopAll → reject(Error)",
+      "input": "admin",
+      "expected": "戻り値 paused、DB も paused、error のログが 1 件以上",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）、captureLogger、stopAll は mockRejectedValueOnce",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-024 stopAll('pause') が失敗しても一時停止は成功し、error のログを出す",
+      "result": "",
+      "note": "world.md 2章 pause は「トランザクションの後」に stopAll を呼ぶ。失敗時の扱いは設計書に記載なし。実装の値（ログを出して API は成功）"
+    },
+    {
+      "id": "TC-UT_WLD-025",
+      "target": "pauseWorld",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "limit_stopped からの一時停止で stop_reason を manual_pause にし、監査の before は limit_stopped",
+      "precondition": "limit_stopped（neurons_limit）",
+      "input": "admin",
+      "expected": "paused・manual_pause、監査 before limit_stopped / after paused",
+      "branches": [
+        "B14-F",
+        "B6-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-22（状態と時間だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-025 limit_stopped からの一時停止で stop_reason を manual_pause にし、監査の before は limit_stopped",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-026",
+      "target": "resumeWorld",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "paused から再開したが Neurons が上限なら paused → limit_stopped（neurons_limit）にし、wake しない",
+      "precondition": "paused、Neurons 9,500",
+      "input": "admin",
+      "expected": "{ limit_stopped, neurons_limit }、running_since null、wake なし",
+      "branches": [
+        "B15-F",
+        "B8-F",
+        "B17-F",
+        "B19-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-25（emergency_stopped からだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-026 paused から再開したが Neurons が上限なら paused → limit_stopped（neurons_limit）にし、wake しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-027",
+      "target": "resumeWorld",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "emergency_stopped から再開すると running にし、止まっていた間は世界内時間に数えない",
+      "precondition": "running で 30 秒 → 緊急停止 → 600 秒経過",
+      "input": "admin（00:10:30 に再開）",
+      "expected": "{ running, null }、running_since と heartbeat_at は 00:10:30、確定分 30、wake 1 回",
+      "branches": [
+        "B15-F",
+        "B8-T",
+        "B17-T",
+        "B19-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし（emergency_stopped → running は DEV にない）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-027 emergency_stopped から再開すると running にし、止まっていた間は世界内時間に数えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-028",
+      "target": "resumeWorld",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "再開の監査の before・after に state と stopReason を残す",
+      "precondition": "paused（manual_pause）",
+      "input": "admin",
+      "expected": "監査 world.resume、before { paused, manual_pause }、after { running, null }",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-028 再開の監査の before・after に state と stopReason を残す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-029",
+      "target": "resumeWorld",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "next_cycle_at が null なら、再開した時刻を next_cycle_at にする",
+      "precondition": "paused、next_cycle_at null",
+      "input": "admin（5 秒後）",
+      "expected": "next_cycle_at は再開した時刻",
+      "branches": [
+        "B18-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-24（予定が過去のときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-029 next_cycle_at が null なら、再開した時刻を next_cycle_at にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-030",
+      "target": "emergencyStopWorld",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "paused から緊急停止すると世界内時間は変えず、stop_reason を emergency にする",
+      "precondition": "running 20 秒 → paused → 60 秒経過",
+      "input": "admin",
+      "expected": "emergency_stopped・emergency・確定分 20・running_since null、監査 before paused、stopAll('emergency')",
+      "branches": [
+        "B20-F",
+        "B6-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-23（遷移の途中で通るだけで確かめていない）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-030 paused から緊急停止すると世界内時間は変えず、stop_reason を emergency にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-031",
+      "target": "emergencyStopWorld",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "limit_stopped から緊急停止できる",
+      "precondition": "limit_stopped（runs_limit）",
+      "input": "admin",
+      "expected": "emergency_stopped・emergency",
+      "branches": [
+        "B20-F",
+        "B6-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-031 limit_stopped から緊急停止できる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-032",
+      "target": "resetWorld",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "limit_stopped・emergency_stopped の世界もリセットでき、archived にする",
+      "precondition": "limit_stopped（runs_limit）、または emergency_stopped",
+      "input": "admin、confirmName「世界 2026-10-22」",
+      "expected": "旧は archived・archived_at 現在、新しい世界は preparing",
+      "branches": [
+        "B21-F",
+        "B22-F",
+        "B23-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-29（paused からだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-032 limit_stopped・emergency_stopped の世界もリセットでき、archived にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-033",
+      "target": "resetWorld",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "旧の記憶がないエージェントは、interest_profile を「興味・関心・大事にしていること」の1文で 200 字までにして作る",
+      "precondition": "paused、エージェント 1 体（interest_profile なし、興味・関心・大事にしていることは各「あ」×100）",
+      "input": "admin、正しい名前",
+      "expected": "写したエージェントに kind=interest_profile、内容は「興味：あ…。関心：」で始まる 200 字",
+      "branches": [
+        "B26-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-29（旧の記憶があるときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-033 旧の記憶がないエージェントは、interest_profile を「興味・関心・大事にしていること」の1文で 200 字までにして作る",
+      "result": "",
+      "note": "200 字の上限は admin_data 4章 buildInterestProfile と同じ"
+    },
+    {
+      "id": "TC-UT_WLD-034",
+      "target": "resetWorld",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "新しい世界は世界内時間 0・巡 0 で始まり、world_settings の全項目を写し、daily_usage は変えない",
+      "precondition": "running → paused。world_settings を既定以外に、cycle_no 7、利用量 1,234.5・67",
+      "input": "admin、正しい名前",
+      "expected": "新しい設定は world_id・updated_at 以外が旧と同じ。新しい世界は確定分 0・cycle_no 0・running_since・started_at・stop_reason は null。利用量は 1,234.5・67 のまま",
+      "branches": [
+        "B21-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-29（cycle_minutes だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-034 新しい世界は世界内時間 0・巡 0 で始まり、world_settings の全項目を写し、daily_usage は変えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-035",
+      "target": "resetWorld",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "リセットの監査は、旧の世界の world_id を targetId と worldId にする",
+      "precondition": "paused",
+      "input": "admin、正しい名前",
+      "expected": "監査 world.reset、targetType world、targetId と worldId は旧の world_id",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-29（before・after だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-035 リセットの監査は、旧の世界の world_id を targetId と worldId にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-036",
+      "target": "resetWorld",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "確認の名前が違うときは、世界・設定・エージェント・監査のどれも増やさない",
+      "precondition": "paused、エージェント 1 体",
+      "input": "confirmName「世界 2026-10-22 」（末尾に空白）",
+      "expected": "AppError CONFIRM_MISMATCH、worlds・world_settings・agents は 1 行のまま、監査は増えない",
+      "branches": [
+        "B22-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-31（状態だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-036 確認の名前が違うときは、世界・設定・エージェント・監査のどれも増やさない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-037",
+      "target": "enterLimitStopped",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "現在の世界がなければ何もしない",
+      "precondition": "世界なし",
+      "input": "neurons_limit",
+      "expected": "worlds は 0 行のまま、stopAll なし",
+      "branches": [
+        "B24-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし（DEV-34 は paused のとき）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-037 現在の世界がなければ何もしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-038",
+      "target": "enterLimitStopped",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "すでに limit_stopped なら stop_reason を変えず、stopAll も呼ばない",
+      "precondition": "limit_stopped（runs_limit）",
+      "input": "free_tier_error",
+      "expected": "limit_stopped・runs_limit のまま、stopAll なし",
+      "branches": [
+        "B24-T",
+        "B25-F"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-038 すでに limit_stopped なら stop_reason を変えず、stopAll も呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_WLD-039",
+      "target": "enterLimitStopped",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "running なら上限の理由（neurons_limit・runs_limit）で running → limit_stopped にする",
+      "precondition": "running、5 秒経過",
+      "input": "neurons_limit、runs_limit",
+      "expected": "limit_stopped・その理由・確定分 5・running_since null、stopAll('limit')",
+      "branches": [
+        "B24-F",
+        "B25-T"
+      ],
+      "mock": "FakeClock 2026-10-22T00:00:00.000Z、一時 DB（createTestDb）、SchedulerControl の差し替え（stopAll → 0、wake は vi.fn）、recordAudit の差し替え（配列に積む）",
+      "dev_ref": "一部 TC-NOUS57_DEV-33（free_tier_error だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_WLD-039 running なら上限の理由（neurons_limit・runs_limit）で running → limit_stopped にする",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
