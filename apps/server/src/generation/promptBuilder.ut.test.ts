@@ -268,16 +268,18 @@ describe("promptBuilder（単体テスト）", () => {
     expect(ctx).toEqual(before);
   });
 
-  it("TC-UT_PRM-031 参照する投稿をすべて外しても、候補の reply・like はそのまま入力に残る", () => {
+  it("TC-UT_PRM-031 上限のために参照する投稿をすべて外したときは、reply・like を候補から外す", () => {
     const refs = [ref(1, "本文".repeat(200))];
-    const noRefs = buildPrompt(context({ refs: [] }), ["reply", "like"], SETTINGS);
+    const noRefs = buildPrompt(context({ refs: [] }), ["reply", "like", "post"], SETTINGS);
     const limit = estimateTokens(noRefs.messages, 0.6);
 
-    const built = buildPrompt(context({ refs }), ["reply", "like"], { ...SETTINGS, max_input_tokens: limit });
+    const built = buildPrompt(context({ refs }), ["reply", "like", "post"], { ...SETTINGS, max_input_tokens: limit });
 
     expect(built.refs).toEqual([]);
-    expect(built.messages[0]!.content).toContain("今回選べる行動は reply・like です");
     expect(built.messages[1]!.content).toContain("（まだ投稿はありません）");
+    expect(built.messages[0]!.content).toContain("今回選べる行動は post です");
+    expect(built.messages[0]!.content).not.toContain("- reply:");
+    expect(built.messages[0]!.content).not.toContain("- like:");
   });
 
   it("TC-UT_PRM-032 promptText はメッセージが 1 件ならその本文、0 件なら空の文字列", () => {

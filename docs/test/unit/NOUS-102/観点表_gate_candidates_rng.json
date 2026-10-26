@@ -10,9 +10,12 @@
   ],
   "framework": "TypeScript / Vitest 2.1.9（environment: node）",
   "test_files": [
-    "apps/server/src/generation/gate.test.ts・candidates.test.ts（実装時、NOUS-61）",
+    "apps/server/src/generation/gate.test.ts（実装時、NOUS-61）",
+    "apps/server/src/generation/candidates.test.ts（実装時、NOUS-61）",
     "apps/server/src/generation/rng.test.ts（実装時、NOUS-48）",
-    "apps/server/src/generation/gate.ut.test.ts・candidates.ut.test.ts・rng.ut.test.ts（単体テストで追加）"
+    "apps/server/src/generation/gate.ut.test.ts（単体テストで追加）",
+    "apps/server/src/generation/candidates.ut.test.ts（単体テストで追加）",
+    "apps/server/src/generation/rng.ut.test.ts（単体テストで追加）"
   ],
   "dependencies": [
     "乱数（createRng。種を固定する。drawCandidates は乱数の関数を引数で受けるので、固定の値を返す関数に差し替える）"
@@ -949,7 +952,7 @@
       "suspect": "",
       "test_name": "TC-UT_CAND-014 すべての重みが 0 なら ['post'] を返す",
       "result": "",
-      "note": "設計書は available が空のときだけ ['post'] と書く。重みがすべて 0 のときは記載なし（実装の値）。issues の確認事項 1"
+      "note": "重みがすべて 0 のときも ['post'] を返すのを仕様とする（2026-10-23 NOUS-102 で Kouhei Tajima が決定。設計書への追記は別に起票）"
     },
     {
       "id": "TC-UT_CAND-015",
@@ -1011,7 +1014,7 @@
     }
   ],
   "issues": [
-    "確認事項 1：重みがすべて 0（または選べる種類の重みがすべて 0）のとき、drawCandidates は post の重みが 0 でも ['post'] を返す（TC-UT_CAND-014）。設計書は「available が空なら ['post']」だけを定めている。設定の検証で弾くか、この動きでよいかを確認したい。",
+    "確認事項 1（決定済み）：重みがすべて 0（または選べる種類の重みがすべて 0）のとき、drawCandidates は post の重みが 0 でも ['post'] を返す（TC-UT_CAND-014）。2026-10-23、NOUS-102 で Kouhei Tajima がこの動きを仕様と決めた。設計書 generation.md への追記は、ケース作成の終わりにまとめて起票される。",
     "確認事項 2：候補の抽選の乱数は salt を「agent_id:candidates」に分けている（NOUS-61 で Kouhei Tajima が了承）。設計書 4章の「3章と同じ種から作る」は満たしているが、salt の決まりは設計書に書かれていないので、改訂のときに追記するとよい。"
   ]
 }

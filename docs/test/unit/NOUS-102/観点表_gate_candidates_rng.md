@@ -7,7 +7,7 @@
 | 作成日 | 2026-10-23 |
 | 対象 | apps/server/src/generation/gate.ts, apps/server/src/generation/candidates.ts, apps/server/src/generation/rng.ts |
 | 言語 / フレームワーク | TypeScript / Vitest 2.1.9（environment: node） |
-| テストファイル | apps/server/src/generation/gate.test.ts・candidates.test.ts（実装時、NOUS-61）, apps/server/src/generation/rng.test.ts（実装時、NOUS-48）, apps/server/src/generation/gate.ut.test.ts・candidates.ut.test.ts・rng.ut.test.ts（単体テストで追加） |
+| テストファイル | apps/server/src/generation/gate.test.ts（実装時、NOUS-61）, apps/server/src/generation/candidates.test.ts（実装時、NOUS-61）, apps/server/src/generation/rng.test.ts（実装時、NOUS-48）, apps/server/src/generation/gate.ut.test.ts（単体テストで追加）, apps/server/src/generation/candidates.ut.test.ts（単体テストで追加）, apps/server/src/generation/rng.ut.test.ts（単体テストで追加） |
 | 外部依存 | 乱数（createRng。種を固定する。drawCandidates は乱数の関数を引数で受けるので、固定の値を返す関数に差し替える） |
 | 入力にした設計書 | BE 詳細設計 generation 4章 decideParticipation・createRng・drawCandidates・availableActions, 行動生成とプロンプトの設計 3章・4章 |
 
@@ -77,12 +77,12 @@
 | TC-UT_CAND-011 | drawCandidates | 正常系 | 境界値 | 乱数が 0 なら区間の先頭の種類を選ぶ | なし | 乱数 0 を返し続ける | ['post','reply'] | B10-T, B11-T | 乱数を固定の値を返す関数に差し替え | 一部 TC-NOUS61_DEV-19（1 つ目だけ） |  | TC-UT_CAND-011 乱数が 0 なら区間の先頭の種類を選ぶ |  |
 | TC-UT_CAND-012 | drawCandidates | 正常系 | 境界値 | 乱数が 1 に近ければ区間の末尾の種類を選ぶ（2 つ目は残りの末尾） | なし | 乱数 0.9999999999 を返し続ける | ['unfollow','follow'] | B10-T, B11-T, B11-F | 乱数を固定の値を返す関数に差し替え | 一部 TC-NOUS61_DEV-19（1 つ目だけ） |  | TC-UT_CAND-012 乱数が 1 に近ければ区間の末尾の種類を選ぶ |  |
 | TC-UT_CAND-013 | drawCandidates | 正常系 | 境界値 | 候補の数 4 で 5 種類が選べるとき、4 つを重複なしに選ぶ | なし | candidateCount=4、種 0〜29 | どれも 4 つで重複なし | B10-T, B10-F | なし | 一部 TC-NOUS61_DEV-14（件数だけ、種 1 だけ） |  | TC-UT_CAND-013 候補の数 4 で 5 種類が選べるとき、4 つを重複なしに選ぶ |  |
-| TC-UT_CAND-014 | drawCandidates | 異常系 | 分岐網羅 | すべての重みが 0 なら ['post'] を返す | なし | weights すべて 0 | ['post'] | B9-F, B10-F, B12-F | なし | 一部 TC-NOUS61_DEV-16（available が空のときだけ） |  | TC-UT_CAND-014 すべての重みが 0 なら ['post'] を返す | 設計書は available が空のときだけ ['post'] と書く。重みがすべて 0 のときは記載なし（実装の値）。issues の確認事項 1 |
+| TC-UT_CAND-014 | drawCandidates | 異常系 | 分岐網羅 | すべての重みが 0 なら ['post'] を返す | なし | weights すべて 0 | ['post'] | B9-F, B10-F, B12-F | なし | 一部 TC-NOUS61_DEV-16（available が空のときだけ） |  | TC-UT_CAND-014 すべての重みが 0 なら ['post'] を返す | 重みがすべて 0 のときも ['post'] を返すのを仕様とする（2026-10-23 NOUS-102 で Kouhei Tajima が決定。設計書への追記は別に起票） |
 | TC-UT_CAND-015 | createCandidateRng | 正常系 | 同値分割 | createCandidateRng は salt「agent_id:candidates」の createRng と同じ列になる | なし | 種 42、agent-x | createRng(42, 'agent-x:candidates') と同じ列 | B13-T | なし | 一部 TC-NOUS61_DEV-22（判定の列と違うことだけ） |  | TC-UT_CAND-015 createCandidateRng は salt「agent_id:candidates」の createRng と同じ列になる |  |
 | TC-UT_CAND-016 | drawCandidates | 正常系 | 依存 | 乱数は選んだ候補の数だけ使う（候補の抽選で余計に消費しない） | なし | candidateCount=3、乱数 0.5 | 乱数の呼び出しは 3 回 | B10-T, B10-F | 呼ばれた回数を数える乱数に差し替え | なし |  | TC-UT_CAND-016 乱数は選んだ候補の数だけ使う |  |
 | TC-UT_CAND-017 | drawCandidates | 異常系 | 分岐網羅 | 乱数が 1 を返しても（範囲の外）、区間の末尾の種類を選ぶ（どの区間にも入らないときの既定） | なし | 乱数 1 を返し続ける | ['unfollow','follow'] | B11-F | 乱数を固定の値を返す関数に差し替え | なし |  | TC-UT_CAND-017 乱数が 1 を返しても（範囲の外）、区間の末尾の種類を選ぶ | mulberry32 は 1 を返さないので、B11 が偽のまま終わる経路は乱数を差し替えて通す |
 
 ## 3. 確認事項・バグの疑い
 
-- 確認事項 1：重みがすべて 0（または選べる種類の重みがすべて 0）のとき、drawCandidates は post の重みが 0 でも ['post'] を返す（TC-UT_CAND-014）。設計書は「available が空なら ['post']」だけを定めている。設定の検証で弾くか、この動きでよいかを確認したい。
+- 確認事項 1（決定済み）：重みがすべて 0（または選べる種類の重みがすべて 0）のとき、drawCandidates は post の重みが 0 でも ['post'] を返す（TC-UT_CAND-014）。2026-10-23、NOUS-102 で Kouhei Tajima がこの動きを仕様と決めた。設計書 generation.md への追記は、ケース作成の終わりにまとめて起票される。
 - 確認事項 2：候補の抽選の乱数は salt を「agent_id:candidates」に分けている（NOUS-61 で Kouhei Tajima が了承）。設計書 4章の「3章と同じ種から作る」は満たしているが、salt の決まりは設計書に書かれていないので、改訂のときに追記するとよい。

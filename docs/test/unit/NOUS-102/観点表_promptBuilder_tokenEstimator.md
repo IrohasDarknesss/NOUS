@@ -7,7 +7,7 @@
 | 作成日 | 2026-10-23 |
 | 対象 | apps/server/src/generation/promptBuilder.ts, apps/server/src/generation/tokenEstimator.ts |
 | 言語 / フレームワーク | TypeScript / Vitest 2.1.9（environment: node） |
-| テストファイル | apps/server/src/generation/promptBuilder.test.ts・tokenEstimator.test.ts（実装時、NOUS-61）, apps/server/src/generation/promptBuilder.ut.test.ts・tokenEstimator.ut.test.ts（単体テストで追加） |
+| テストファイル | apps/server/src/generation/promptBuilder.test.ts（実装時、NOUS-61）, apps/server/src/generation/tokenEstimator.test.ts（実装時、NOUS-61）, apps/server/src/generation/promptBuilder.ut.test.ts（単体テストで追加）, apps/server/src/generation/tokenEstimator.ut.test.ts（単体テストで追加） |
 | 外部依存 | テンプレートのファイル（prompts/v1 を読む。版の検査は一時ディレクトリに書いたテンプレートを promptsDir で渡す）, SQLite（loadTokenRatio。createTestDb の一時 DB） |
 | 入力にした設計書 | BE 詳細設計 generation 4章 buildPrompt・sanitizeTimelineText・estimateTokens・loadTokenRatio, 行動生成とプロンプトの設計 5章・10章・11章 |
 
@@ -93,11 +93,11 @@
 | TC-UT_PRM-028 | fitMemories | 異常系 | 境界値 | 上限が負なら空、上限に達したら後ろの記憶を入れない | なし | 5 字 × 3、上限 −1 / 上限 5 | [] / 先頭の 1 件だけ | B6-T, B7-T, B8-T | なし | 一部 TC-NOUS61_DEV-61（上限 0 だけ） |  | TC-UT_PRM-028 fitMemories は上限が負なら空、上限に達したら後ろの記憶を入れない |  |
 | TC-UT_PRM-029 | fitMemories | 異常系 | 分岐網羅 | 内容が空の記憶を入れない | なし | 空の interest_profile と "b"、上限 10 | [recent_posts の "b"] だけ | B6-F, B7-T, B8-F, B8-T | なし | なし |  | TC-UT_PRM-029 fitMemories は内容が空の記憶を入れない | loadMemories が空の記憶を除くので通常は起きない。防御の分岐を通す |
 | TC-UT_PRM-030 | buildPrompt | 正常系 | 依存 | 入力の context を書き換えない（refs・memories を外すのは戻り値の側だけ） | リポジトリの prompts/v1 | 投稿 12 件、上限 800 | 呼ぶ前と後の context が等しい | B14-F, B15-T | なし | なし |  | TC-UT_PRM-030 入力の context を書き換えない |  |
-| TC-UT_PRM-031 | buildPrompt | 正常系 | 分岐網羅 | 参照する投稿をすべて外しても、候補の reply・like はそのまま入力に残る | リポジトリの prompts/v1 | 長い本文の投稿 1 件、候補 reply・like、上限 = 投稿なしの見積もり | refs は []、system に「reply・like」、user に「（まだ投稿はありません）」 | B13-T, B14-F, B14-T, B15-T | なし | なし |  | TC-UT_PRM-031 参照する投稿をすべて外しても、候補の reply・like はそのまま入力に残る | 設計書は候補の抽選（drawCandidates）を buildPrompt の前に行う順序だけを定め、投稿を外しきったときの候補の扱いは記載なし。実装の値。issues の確認事項 1 |
+| TC-UT_PRM-031 | buildPrompt | 異常系 | 分岐網羅 | 上限のために参照する投稿をすべて外したときは、reply・like を候補から外す | リポジトリの prompts/v1 | 長い本文の投稿 1 件、候補 reply・like・post、上限 = 投稿なしの見積もり | refs は []、user に「（まだ投稿はありません）」。system の候補は post だけ（「今回選べる行動は post です」）で、reply・like の選び方の目安を含まない | B13-T, B14-F, B14-T, B15-T | なし | なし | 今の buildPrompt は受け取った候補をそのまま入れるため、投稿を外しきっても system に reply・like が残る（実施のときに NG になる見込み） | TC-UT_PRM-031 上限のために参照する投稿をすべて外したときは、reply・like を候補から外す | 仕様は 2026-10-23 NOUS-102 で Kouhei Tajima が決定（候補に入れる条件「参照できる投稿があること」を、外した後の状態で判断する）。issues の疑い 1 |
 | TC-UT_PRM-032 | promptText | 正常系 | 境界値 | メッセージが 1 件ならその本文、0 件なら空の文字列 | なし | 1 件、0 件 | "u"、"" |  | なし | 一部 TC-NOUS61_DEV-65（2 件だけ） |  | TC-UT_PRM-032 promptText はメッセージが 1 件ならその本文、0 件なら空の文字列 |  |
 
 ## 3. 確認事項・バグの疑い
 
-- 確認事項 1：候補は buildPrompt の前に、外す前の参照する投稿で抽選する（設計書 1章・4章の順序どおり）。上限のために参照する投稿をすべて外すと、候補に reply・like が残ったまま、タイムラインが「（まだ投稿はありません）」になる（TC-UT_PRM-031）。LLM が reply・like を選ぶと P 番号が無く、検証で不正な形式になり再生成に回る。候補から外すか、このままでよいかを確認したい。
+- 疑い 1：候補は buildPrompt の前に、外す前の参照する投稿で抽選する。上限のために参照する投稿をすべて外すと、候補に reply・like が残ったまま、タイムラインが「（まだ投稿はありません）」になる（TC-UT_PRM-031）。2026-10-23、NOUS-102 で Kouhei Tajima が「外した後に参照できる投稿が無ければ reply・like を候補から外す」を仕様と決めたため、今の実装は仕様と食い違う。LLM が reply・like を選ぶと actionValidator で対象なしとして弾かれ、試行が無駄になる。そのときの動きは NOUS-103（actionValidator）の観点でも見る。
 - 確認事項 2：区切りの無害化は </timeline> だけを置き換える（設計書 11章どおり、TC-UT_PRM-011）。</timeline >・</ timeline> のような揺れや、記憶（会話の要約は他の住人の投稿の先頭 40 字を含む）は system に整えずに入る。NFR-S-012 の「他の住人の投稿は <timeline> の中だけ」と、5.1 の「記憶は system」の関係を、設計として確認したい。会話の要約の作り方は NOUS-103（memoryUpdater）の観点でも見る。
 - 確認事項 3：テンプレートは版ごとにプロセスの中で1回だけ読む（TC-UT_PRM-017）。同じ版のファイルを直したときは再起動が要る。設計書 10章の「新しい版のフォルダを作る」運用なら問題ないが、運用の手順に一言あるとよい。
