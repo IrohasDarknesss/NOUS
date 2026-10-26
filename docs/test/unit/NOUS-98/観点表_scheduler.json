@@ -1,0 +1,1028 @@
+{
+  "title": "スケジューラー B01（scheduler/scheduler.ts）",
+  "ticket": "NOUS-98",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/scheduler/scheduler.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/scheduler/scheduler.test.ts（実装時、NOUS-59・83）",
+    "apps/server/src/scheduler/scheduler.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "DB（一時 DB）",
+    "時計（FakeClock）",
+    "runOpportunity（差し替え）",
+    "enterLimitStopped（差し替え、既定は worldService）",
+    "乱数（random を差し替え）",
+    "LlmClient（呼ばれない差し替え）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 world 1章（起動のシーケンス）・4章（IPO）・5章（B01・B02・B06・B07・B08）・6章（例外・トランザクション）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "pickCount：total <= 0",
+      "location": "scheduler.ts:87"
+    },
+    {
+      "id": "B2",
+      "condition": "sleepUntilWake：closed なら待たない",
+      "location": "scheduler.ts:112"
+    },
+    {
+      "id": "B3",
+      "condition": "sleepUntilWake：wakePending（待ちの外で wake された）",
+      "location": "scheduler.ts:113"
+    },
+    {
+      "id": "B4",
+      "condition": "sleepUntilWake：abort 以外の例外を投げ直す（!controller.signal.aborted）",
+      "location": "scheduler.ts:122"
+    },
+    {
+      "id": "B5",
+      "condition": "isWorldRunning：現在の世界があり、同じ world_id で running",
+      "location": "scheduler.ts:130"
+    },
+    {
+      "id": "B6",
+      "condition": "canAssign：closed || stopRequested || !isWorldRunning",
+      "location": "scheduler.ts:135"
+    },
+    {
+      "id": "B7",
+      "condition": "canAssign：world_settings がない",
+      "location": "scheduler.ts:137"
+    },
+    {
+      "id": "B8",
+      "condition": "canAssign：isWithinLimits（その日の上限の中）",
+      "location": "scheduler.ts:138"
+    },
+    {
+      "id": "B9",
+      "condition": "runOne：例外が FreeTierExceededError",
+      "location": "scheduler.ts:165"
+    },
+    {
+      "id": "B10",
+      "condition": "runOne：行動機会の後に world_settings がある",
+      "location": "scheduler.ts:179"
+    },
+    {
+      "id": "B11",
+      "condition": "runOne：limitReason が null でない（上限に達した）",
+      "location": "scheduler.ts:181"
+    },
+    {
+      "id": "B12",
+      "condition": "worker：割り当てる住人が残っていない（targets[next] === undefined）",
+      "location": "scheduler.ts:220"
+    },
+    {
+      "id": "B13",
+      "condition": "runDueCycle：世界がない、または running でない",
+      "location": "scheduler.ts:231"
+    },
+    {
+      "id": "B14",
+      "condition": "runDueCycle：next_cycle_at があり、まだ来ていない",
+      "location": "scheduler.ts:232"
+    },
+    {
+      "id": "B15",
+      "condition": "runDueCycle：world_settings がない",
+      "location": "scheduler.ts:234"
+    },
+    {
+      "id": "B16",
+      "condition": "runDueCycle：巡が周期より長い（巡の終わり > 巡の開始＋周期）",
+      "location": "scheduler.ts:241"
+    },
+    {
+      "id": "B17",
+      "condition": "loop：runDueCycle が true（巡を実行した）",
+      "location": "scheduler.ts:253"
+    },
+    {
+      "id": "B18",
+      "condition": "loop：running で next_cycle_at がある（next_cycle_at まで待つ）",
+      "location": "scheduler.ts:255"
+    },
+    {
+      "id": "B19",
+      "condition": "loop：想定外の例外（catch）",
+      "location": "scheduler.ts:261"
+    },
+    {
+      "id": "B20",
+      "condition": "runningEventIds：現在の世界がない",
+      "location": "scheduler.ts:274"
+    },
+    {
+      "id": "B21",
+      "condition": "stopAll：mode が emergency でない（pause・limit）",
+      "location": "scheduler.ts:288"
+    },
+    {
+      "id": "B22",
+      "condition": "stopAll：実行中の行動機会がある（entries.length > 0）",
+      "location": "scheduler.ts:297"
+    },
+    {
+      "id": "B23",
+      "condition": "stopAll：5 秒の後も running の生成イベントがある",
+      "location": "scheduler.ts:308"
+    },
+    {
+      "id": "B24",
+      "condition": "wake：loop が待っている（wakeController がある）",
+      "location": "scheduler.ts:320"
+    },
+    {
+      "id": "B25",
+      "condition": "start：started || closed",
+      "location": "scheduler.ts:329"
+    },
+    {
+      "id": "B26",
+      "condition": "createScheduler：deps.enterLimitStopped を渡した",
+      "location": "scheduler.ts:347"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS59_DEV-01",
+      "target": "runDueCycle / runCycle",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "running の世界で 1 巡を実行し、active の全員に 1 回ずつ割り当てる（stopped の住人は除く）",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 2 体・stopped 1 体",
+      "input": "runDueCycle()",
+      "expected": "true。runOpportunity は active の 2 体に 1 回ずつ、ctx に worldId・cycleNo 1・llmMode・config・llm・signal。cycle_no が 1",
+      "branches": [
+        "B5-T",
+        "B6-F",
+        "B7-F",
+        "B8-T",
+        "B12-T",
+        "B12-F",
+        "B13-F",
+        "B14-F",
+        "B15-F",
+        "B26-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-01 running の世界で 1 巡を実行し、active の全員に 1 回ずつ割り当てる（停止中の住人は除く）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-02",
+      "target": "runDueCycle",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "次の巡は巡の開始＋cycle_minutes で、それまでは巡を始めない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、cycle_minutes 20",
+      "input": "runDueCycle() → 20 分進めて runDueCycle()",
+      "expected": "next_cycle_at = 開始＋20 分。途中は false、20 分後に true。cycle_no 2",
+      "branches": [
+        "B14-T",
+        "B16-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-02 次の巡は周期の後（next_cycle_at = 巡の開始＋cycle_minutes）で、それまでは巡を始めない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-03",
+      "target": "runDueCycle",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "1 巡が周期より長ければ、次の巡を巡の終わりまで遅らせる",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、cycle_minutes 15",
+      "input": "runOpportunity の中で時計を 20 分進める",
+      "expected": "next_cycle_at = 開始＋20 分（巡の終わり）",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-03 1巡が周期より長ければ、次の巡は巡の終わりまで遅らせる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-04",
+      "target": "runCycle",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "max_concurrency=1 を超えて同時に実行しない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 4 体",
+      "input": "max_concurrency 1",
+      "expected": "同時に動く数の最大が 1、4 件とも呼ばれる",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5、release まで終わらない runOpportunity",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-04 max_concurrency=1 を超えて同時に runOpportunity を呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-05",
+      "target": "runCycle",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "max_concurrency=2 を超えて同時に実行しない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 4 体",
+      "input": "max_concurrency 2",
+      "expected": "同時に動く数の最大が 2、4 件とも呼ばれる",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5、release まで終わらない runOpportunity",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-05 max_concurrency=2 を超えて同時に runOpportunity を呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-06",
+      "target": "runDueCycle",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "世界が running でなければ巡を始めない",
+      "precondition": "paused の世界",
+      "input": "runDueCycle()",
+      "expected": "false。runOpportunity は呼ばれない",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-06 世界が running でなければ巡を始めない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-07",
+      "target": "start / loop / wake",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "loop は running でない間は待ち、wake で確かめ直して巡を始める",
+      "precondition": "paused の世界、active 1 体",
+      "input": "start() → running にして wake()",
+      "expected": "wake の前は呼ばれず、wake の後に 1 回呼ばれる",
+      "branches": [
+        "B2-F",
+        "B3-F",
+        "B4-F",
+        "B17-F",
+        "B18-F",
+        "B19-F",
+        "B24-T",
+        "B25-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-07 start した loop は、running でない間は待ち、wake で確かめ直して巡を始める",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-08",
+      "target": "pickCount / shuffleBySeed / runCycle",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "activity_percent の割合（切り上げ）だけ選び、同じ種なら同じ順",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 4 体、activity_percent 50",
+      "input": "pickCount(10,100)・(10,35)・(3,10)・(0,50)、shuffleBySeed(6 件, 101)",
+      "expected": "10・4・1・0。同じ種で同じ順で要素は保存。巡では 2 体に割り当てる",
+      "branches": [
+        "B1-T",
+        "B1-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-08 activity_percent の割合（切り上げ）だけ選び、同じ種なら同じ順",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-09",
+      "target": "stopAll",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "stopAll('pause') の後は新しい割り当てをせず、shouldContinue が false になり 0 を返す",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 3 体、max_concurrency 1",
+      "input": "1 件目の実行中に stopAll('pause')",
+      "expected": "0 を返す。shouldContinue false、signal は abort しない。2 件目以降は割り当てない",
+      "branches": [
+        "B6-T",
+        "B21-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-09 stopAll('pause') の後は新しい割り当てをせず、shouldContinue が false になり、0 を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-10",
+      "target": "stopAll",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "stopAll('emergency') は実行中の AbortController を止め、取り消した件数を返す",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 2 体、running の生成イベント 2 件",
+      "input": "2 件の実行中に stopAll('emergency')",
+      "expected": "2 を返す。両方の signal が abort。runningCount 0",
+      "branches": [
+        "B20-F",
+        "B21-F",
+        "B22-T",
+        "B23-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-10 stopAll('emergency') は実行中の AbortController を止め、取り消した件数を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-11",
+      "target": "stopAll",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "緊急停止の後 5 秒を過ぎても running の行は cancelled に直し、件数に入れる",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、running の生成イベント 1 件",
+      "input": "abort を無視する runOpportunity、stopAll('emergency') → 5 秒進める",
+      "expected": "1 を返す。行は cancelled（failure_kind cancelled）",
+      "branches": [
+        "B22-T",
+        "B23-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-11 緊急停止の後 5 秒を過ぎても running の行は cancelled に直し、件数に入れる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-12",
+      "target": "runOne",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "FreeTierExceededError で enterLimitStopped('free_tier_error')",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "runOpportunity が FreeTierExceededError",
+      "expected": "enterLimitStopped('free_tier_error')",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-12 runOpportunity が FreeTierExceededError を投げたら enterLimitStopped('free_tier_error')",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-13",
+      "target": "runOne",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "行動機会の後に Neurons が上限に達していたら enterLimitStopped('neurons_limit') し、次を割り当てない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 2 体、max_concurrency 1",
+      "input": "行動機会の中で neurons 9500",
+      "expected": "enterLimitStopped('neurons_limit')、runOpportunity は 1 回",
+      "branches": [
+        "B8-F",
+        "B10-T",
+        "B11-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-13 行動機会の後に上限を超えていたら enterLimitStopped し、次を割り当てない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-14",
+      "target": "runOne",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "行動機会の後に回数が上限に達していたら enterLimitStopped('runs_limit') し、次を割り当てない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 2 体、max_concurrency 1",
+      "input": "行動機会の中で runs 480",
+      "expected": "enterLimitStopped('runs_limit')、runOpportunity は 1 回",
+      "branches": [
+        "B8-F",
+        "B10-T",
+        "B11-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-14 行動機会の後に上限を超えていたら enterLimitStopped し、次を割り当てない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-15",
+      "target": "runOne",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "runOpportunity の想定外の例外は記録して巡を続ける",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 2 体、max_concurrency 1",
+      "input": "1 件目が Error('boom')",
+      "expected": "2 件目も呼ばれる",
+      "branches": [
+        "B9-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-15 runOpportunity の想定外の例外は記録して巡を続ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-16",
+      "target": "runningCount / stop",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "runningCount は実行中の数を返し、stop で取り消して 0 になる",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "start() → stop()",
+      "expected": "実行中は 1、stop の後 0。signal が abort",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-16 runningCount は実行中の数を返し、stop で取り消して 0 になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS59_DEV-17",
+      "target": "createScheduler（既定の enterLimitStopped）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "既定の enterLimitStopped は世界を limit_stopped（free_tier_error）にする",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "enterLimitStopped を渡さず、runOpportunity が FreeTierExceededError",
+      "expected": "worlds.state limit_stopped、stop_reason free_tier_error",
+      "branches": [
+        "B26-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity を差し替え",
+      "dev_ref": "実装時のテスト（NOUS-59）",
+      "suspect": "",
+      "test_name": "TC-NOUS59_DEV-17 既定の enterLimitStopped は世界を limit_stopped（free_tier_error）にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS83_DEV-09",
+      "target": "stopAll",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "stopAll('pause') は stopSignal を abort し、signal は abort せずに 0 を返す",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "実行中に stopAll('pause')",
+      "expected": "0。stopSignal は abort、signal は abort しない",
+      "branches": [
+        "B21-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-09 stopAll('pause') は実行中の行動機会の ctx.stopSignal を abort し ctx.signal は abort せずに 0 を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS83_DEV-10",
+      "target": "stopAll",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "stopAll('limit') は stopSignal を abort し、signal は abort せずに 0 を返す",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "実行中に stopAll('limit')",
+      "expected": "0。stopSignal は abort、signal は abort しない",
+      "branches": [
+        "B21-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-10 stopAll('limit') は実行中の行動機会の ctx.stopSignal を abort し ctx.signal は abort せずに 0 を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS83_DEV-11",
+      "target": "stopAll",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "stopAll('emergency') は signal を abort し、取り消した件数を返す",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体、running の生成イベント 1 件",
+      "input": "実行中に stopAll('emergency')",
+      "expected": "1。signal が abort、runningCount 0",
+      "branches": [
+        "B21-F",
+        "B22-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-11 stopAll('emergency') は実行中の行動機会の ctx.signal を abort し取り消した件数を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS83_DEV-12",
+      "target": "stopAll",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "stopAll('pause') で再試行の待ちの途中の行動機会が、時計を進めずに stopped で閉じる",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "stopSignal を待つ runOpportunity、stopAll('pause')",
+      "expected": "結果は cancelled・failureKind stopped、runningCount 0",
+      "branches": [
+        "B21-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "実装時のテスト（NOUS-83）",
+      "suspect": "",
+      "test_name": "TC-NOUS83_DEV-12 stopAll('pause') により再試行の待ちの途中の行動機会が時計を進めずに stopped で閉じる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-001",
+      "target": "runDueCycle",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "next_cycle_at の 1 ミリ秒前は巡を始めず、ちょうどで始める",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体、next_cycle_at = 09:01:00.000",
+      "input": "時計を 08:59.999 分進めて runDueCycle()、さらに 1 ミリ秒進めて runDueCycle()",
+      "expected": "1 回目 false、2 回目 true。runOpportunity は 1 回",
+      "branches": [
+        "B14-T",
+        "B14-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "一部 TC-NOUS59_DEV-02（周期ちょうどの後だけ。1 ミリ秒前は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-001 next_cycle_at の 1 ミリ秒前は巡を始めず、ちょうどになると巡を始める",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-002",
+      "target": "runDueCycle",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "next_cycle_at が NULL の running の世界は、すぐに巡を始めて next_cycle_at を書く",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体、cycle_minutes 15、next_cycle_at NULL",
+      "input": "runDueCycle()",
+      "expected": "true。next_cycle_at = 09:15:00.000Z",
+      "branches": [
+        "B14-F",
+        "B16-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "一部 TC-NOUS59_DEV-01（NULL のときの next_cycle_at の値は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-002 next_cycle_at が NULL の running の世界では、すぐに巡を始めて next_cycle_at を書く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-003",
+      "target": "runDueCycle",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "現在の世界がないときは巡を始めず false を返す",
+      "precondition": "世界を archived にする（現在の世界なし）",
+      "input": "runDueCycle()",
+      "expected": "false。runOpportunity は呼ばれない",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし（DEV-06 は paused の世界だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-003 現在の世界がないときは巡を始めず false を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-004",
+      "target": "runDueCycle",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "running でない状態（preparing・limit_stopped・emergency_stopped）では巡を始めず cycle_no も進めない",
+      "precondition": "各状態の世界、active 1 体",
+      "input": "runDueCycle()",
+      "expected": "false。runOpportunity は呼ばれず cycle_no 0 のまま",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "一部 TC-NOUS59_DEV-06（paused だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-004 世界が running でない状態では巡を始めず cycle_no も進めない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-005",
+      "target": "runDueCycle",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "world_settings がない running の世界では例外を投げる",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、world_settings を削除",
+      "input": "runDueCycle()",
+      "expected": "Error（world_settings がありません）で拒否",
+      "branches": [
+        "B13-F",
+        "B15-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-005 world_settings がない running の世界では runDueCycle が例外を投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-006",
+      "target": "runCycle",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "active が 0 体でも巡は終わり、cycle_no と next_cycle_at を進める",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、stopped 1 体だけ",
+      "input": "runDueCycle()",
+      "expected": "true。runOpportunity は呼ばれず、cycle_no 1、next_cycle_at = 09:20:00.000Z",
+      "branches": [
+        "B12-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし（DEV-08 の pickCount(0,50) は関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-006 active のエージェントが 0 体でも巡は終わり、cycle_no と next_cycle_at を進める",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-007",
+      "target": "runCycle",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "max_concurrency が対象の数より大きいときは、対象の数まで同時に実行する",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 2 体、max_concurrency 3",
+      "input": "runDueCycle()",
+      "expected": "実行中の数は 2、同時の最大 2、呼び出し 2 回",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5、release まで終わらない runOpportunity",
+      "dev_ref": "一部 TC-NOUS59_DEV-04・05（対象の数より小さいときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-007 max_concurrency が対象の数より大きいときは、対象の数まで同時に実行する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-008",
+      "target": "canAssign",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "巡の始めにその日の回数が上限ちょうどなら、1 件も割り当てない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体、daily_runs_limit 480、daily_usage runs 480",
+      "input": "runDueCycle()",
+      "expected": "true（巡は終わる）。runOpportunity は呼ばれない",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし（DEV-13・14 は行動機会の後の確認）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-008 巡の始めにその日の回数が上限ちょうどなら、1件も割り当てない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-009",
+      "target": "runOne",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "行動機会の後の利用が上限の 1 つ手前なら上限停止にせず、次の住人にも割り当てる",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 2 体、daily_usage neurons 9499・runs 479",
+      "input": "runDueCycle()",
+      "expected": "enterLimitStopped は呼ばれない。runOpportunity は 2 回",
+      "branches": [
+        "B8-T",
+        "B10-T",
+        "B11-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "一部 TC-NOUS59_DEV-13・14（上限ちょうどだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-009 行動機会の後のその日の利用が上限の 1 つ手前なら上限停止にせず、次の住人にも割り当てる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-010",
+      "target": "pickCount",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "割合を切り上げ、1 体以上なら最低 1 体、体数を超えない",
+      "precondition": "なし",
+      "input": "(1,10)・(10,10)・(10,11)・(10,100)・(30,100)・(0,100)",
+      "expected": "1・1・2・10・30・0",
+      "branches": [
+        "B1-T",
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS59_DEV-08（10%・11% の境目と 30 体は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-010 pickCount は割合を切り上げ、1 体以上なら最低 1 体、体数を超えない",
+      "result": "",
+      "note": "activity_percent は DB の CHECK で 10〜100"
+    },
+    {
+      "id": "TC-UT_SCH-011",
+      "target": "shuffleBySeed",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "空と 1 件の配列をそのまま返し、元の配列を書き換えない",
+      "precondition": "なし",
+      "input": "[]、[\"a\"]、凍結した [\"a\",\"b\",\"c\"]（種 7）",
+      "expected": "[]、[\"a\"]、要素は同じで元の配列は変わらない",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS59_DEV-08（6 件だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-011 shuffleBySeed は空と 1 件の配列をそのまま返し、元の配列を書き換えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-012",
+      "target": "start",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "start を 2 回呼んでも loop は 1 つだけ動く",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "start() を 2 回",
+      "expected": "runOpportunity は 1 回",
+      "branches": [
+        "B17-T",
+        "B25-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-012 start を 2 回呼んでも loop は 1 つだけ動く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-013",
+      "target": "stop / start / wake",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "stop の後は start も wake も巡を始めない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "stop() → start() → wake() → 1 時間進める",
+      "expected": "runOpportunity は呼ばれない",
+      "branches": [
+        "B25-T",
+        "B24-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし（DEV-16 は start の後の stop）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-013 stop の後は start も wake も巡を始めない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-014",
+      "target": "loop",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "loop は next_cycle_at まで時計で待ち、1 ミリ秒前では始めず、ちょうどで次の巡を始める",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体、cycle_minutes 20",
+      "input": "start() → 19:59.999 分進める → 1 ミリ秒進める",
+      "expected": "1 ミリ秒前は 1 回、ちょうどで 2 回。cycle_no 2",
+      "branches": [
+        "B17-T",
+        "B18-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし（DEV-02 は runDueCycle を直接呼ぶ）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-014 loop は next_cycle_at まで時計で待ち、1 ミリ秒前では始めず、ちょうどで次の巡を始める",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-015",
+      "target": "loop",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "loop の想定外の例外は error を記録し、60 秒後に続ける",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体、world_settings を削除",
+      "input": "start() → world_settings を戻す → 59.999 秒進める → 1 ミリ秒進める",
+      "expected": "error が 1 件。60 秒の前は呼ばれず、60 秒で 1 回呼ばれる",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5、captureLogger",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-015 loop の想定外の例外は error を記録し、60 秒後に続ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-016",
+      "target": "stopAll",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "emergency で実行中がなく running の生成イベントもなければ、待たずに 0 を返す",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）",
+      "input": "stopAll('emergency')",
+      "expected": "0。時計の待ちを張らない（pendingCount 0）",
+      "branches": [
+        "B22-F",
+        "B23-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-016 stopAll('emergency') で実行中の行動機会がなく running の生成イベントもなければ、待たずに 0 を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-017",
+      "target": "stopAll",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "emergency で実行中がなくても、残っている running の生成イベントは cancelled にして数える",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、running の生成イベント 1 件（実行中の行動機会はない）",
+      "input": "stopAll('emergency')",
+      "expected": "1。行は cancelled・failure_kind cancelled・finished_at 09:00:00.000Z",
+      "branches": [
+        "B22-F",
+        "B23-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-017 stopAll('emergency') で実行中の行動機会がなくても、残っている running の生成イベントは cancelled にして数える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-018",
+      "target": "stopAll / runDueCycle",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "stopAll('pause') の後に世界が running のまま次の巡が来たら、停止の指示を下ろして割り当てを再開する",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "stopAll('pause') → runDueCycle()",
+      "expected": "true。runOpportunity は 1 回",
+      "branches": [
+        "B6-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-018 stopAll('pause') の後に世界が running のまま次の巡が来たら、停止の指示を下ろして割り当てを再開する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-019",
+      "target": "runOne",
+      "category": "異常系",
+      "technique": "依存",
+      "viewpoint": "FreeTierExceededError のときは free_tier_error だけにし、上限の理由で呼び直さない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体、daily_runs_limit 480",
+      "input": "runOpportunity の中で runs 480 にして FreeTierExceededError",
+      "expected": "enterLimitStopped は 1 回、引数 free_tier_error",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "一部 TC-NOUS59_DEV-12（回数は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-019 FreeTierExceededError のときは free_tier_error の上限停止だけにし、続けて上限の理由で呼び直さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-020",
+      "target": "shouldContinue",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "行動機会の途中で世界が running でなくなると shouldContinue が false を返す",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "実行中に worlds を paused にする",
+      "expected": "paused の前 true、後 false",
+      "branches": [
+        "B5-T",
+        "B5-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5、release まで終わらない runOpportunity",
+      "dev_ref": "なし（DEV-09 は stopAll による false）",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-020 行動機会の途中で世界が running でなくなると shouldContinue が false を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-021",
+      "target": "runCycle",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "1 巡の全員に、random から作った同じ cycleSeed と同じ cycleNo を渡す",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 2 体",
+      "input": "random → 0.25",
+      "expected": "cycleSeed は 2 体とも 1073741824（floor(0.25×2^32)）、cycleNo は 1",
+      "branches": [],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、random → 0.25",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-021 1 巡の全員に、random から作った同じ cycleSeed と同じ cycleNo を渡す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-022",
+      "target": "wake / loop",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "巡の途中（loop が待っていないとき）に wake されても、次の巡は next_cycle_at まで始めない",
+      "precondition": "running の世界（seedRunningWorld、既定の world_settings）、active 1 体",
+      "input": "start() → 巡の途中で wake() → 20 分進める",
+      "expected": "wake の後は 1 回のまま、20 分で 2 回",
+      "branches": [
+        "B3-T",
+        "B24-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5、release まで終わらない runOpportunity",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-022 巡の途中（loop が待っていないとき）に wake されても、次の巡は next_cycle_at まで始めない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_SCH-023",
+      "target": "stopAll",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "現在の世界がないときの stopAll('emergency') は、生成イベントを読まずに 0 を返す",
+      "precondition": "世界を archived にする。running の生成イベント 1 件",
+      "input": "stopAll('emergency')",
+      "expected": "0。生成イベントは running のまま",
+      "branches": [
+        "B20-T"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、runOpportunity・enterLimitStopped を vi.fn で差し替え、random → 0.5",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_SCH-023 現在の世界がないときの stopAll('emergency') は、生成イベントを読まずに 0 を返す",
+      "result": "",
+      "note": "archived の世界の running の行は、次の起動の B07 が閉じる"
+    }
+  ],
+  "issues": [
+    "確認事項 1：B2-T（closed のときの sleepUntilWake）・B4-T（abort 以外の sleep の例外）・B7-T と B10-F（巡の途中で world_settings が消える）は、公開の操作からは起こせない（または FakeClock では起きない）ため、ケースを作っていない。",
+    "確認事項 2：設計書（world 4章 runCycle 3）は「そのエージェントが active か」を割り当ての前に確かめるとしているが、Scheduler は巡の始めに active を選ぶだけで、割り当ての時点の確認は runOpportunity が行う（opportunityRunner.ts）。両方を合わせて設計どおりと見て、Scheduler の単体テストでは扱わない（NOUS-104 の範囲）。"
+  ]
+}
