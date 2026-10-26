@@ -1,0 +1,452 @@
+{
+  "ticket": "NOUS-104",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "title": "試行の記録と利用量の加算（generation/usageRecorder.ts）",
+  "targets": [
+    "apps/server/src/generation/usageRecorder.ts"
+  ],
+  "test_files": [
+    "apps/server/src/generation/usageRecorder.test.ts（実装時、NOUS-63）",
+    "apps/server/src/generation/usageRecorder.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "DB（generation_attempts・daily_usage・daily_metrics・generation_events）",
+    "ULID（newUlid）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 generation 3章 addDailyUsage・addDailyMetrics・4章 recordAttempt・6章 トランザクション",
+    "DB 物理設計書 generation_attempts・daily_usage・daily_metrics"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "clipErrorDetail：detail == null",
+      "location": "usageRecorder.ts:57"
+    },
+    {
+      "id": "B2",
+      "condition": "clipErrorDetail：500 コードポイント以下",
+      "location": "usageRecorder.ts:59"
+    },
+    {
+      "id": "B3",
+      "condition": "addDailyUsage：input.runs が渡されている（偽なら isFirstOfEvent で 1 か 0）",
+      "location": "usageRecorder.ts:67"
+    },
+    {
+      "id": "B4",
+      "condition": "addDailyUsage：トークン・Neurons が渡されている（偽なら 0）",
+      "location": "usageRecorder.ts:68-70"
+    },
+    {
+      "id": "B5",
+      "condition": "addDailyMetrics：列の値が undefined でない",
+      "location": "usageRecorder.ts:106"
+    },
+    {
+      "id": "B6",
+      "condition": "addDailyMetrics：加算する列が 0 個",
+      "location": "usageRecorder.ts:112"
+    },
+    {
+      "id": "B7",
+      "condition": "metricsForSucceededAction：行動の種類（6 通り）",
+      "location": "usageRecorder.ts:131-142"
+    },
+    {
+      "id": "B8",
+      "condition": "recordAttempt：result が ok",
+      "location": "usageRecorder.ts:154"
+    },
+    {
+      "id": "B9",
+      "condition": "recordAttempt：isFirstOfEvent が渡されている（偽なら attemptNo === 1）",
+      "location": "usageRecorder.ts:158"
+    },
+    {
+      "id": "B10",
+      "condition": "recordAttempt：所要時間が負（0 にする）",
+      "location": "usageRecorder.ts:160"
+    }
+  ],
+  "issues": [
+    "疑い 1：不正な形式の試行は LLM が応答しており Neurons を消費しているが、トークン・Neurons を 0 で記録している。daily_usage.neurons が実際の消費より少なくなり、日次上限の判定が甘くなる。recordAttempt は result が ok 以外のときトークン・Neurons を 0 にする。不正な形式の試行のトークン・Neurons は加算するのが仕様（2026-10-26 Kouhei Tajima の決定）。TC-UT_USG-012 は仕様の期待結果で書いた（実施で NG の見込み）。TC-NOUS63_DEV-02 は 0 を期待しており、仕様と食い違う",
+    "分岐 B7 の偽（6 通りのどれにも当たらない）は通せない。引数の型が ActionKind | 'none' の 6 値で、switch がすべてを返すため、型の上では到達しない（default が無いので、型を外した値なら undefined を返す）"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS63_DEV-01",
+      "target": "recordAttempt",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ok の 1 回目は試行・daily_usage・生成イベントを 1 トランザクションで更新する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "result=ok、attemptNo=1",
+      "expected": "試行 1 件、daily_usage calls=1・runs=1、生成イベントの合計",
+      "branches": [
+        "B8-T",
+        "B9-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-01 recordAttempt（ok・1回目）は generation_attempts・daily_usage・generation_events を 1 トランザクションで更新する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-02",
+      "target": "recordAttempt",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "失敗の試行はトークン・Neurons を 0、2 回目以降は runs を加算しない",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "timeout・invalid_format・ok",
+      "expected": "calls=3・runs=1、トークン・Neurons は ok の分だけ",
+      "branches": [
+        "B8-F",
+        "B9-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "invalid_format の試行のトークン・Neurons を 0 とする期待値が、疑い 1 と食い違う",
+      "test_name": "TC-NOUS63_DEV-02 失敗の試行はトークン・neurons を 0 で記録し、2 回目以降の試行では daily_usage.runs を増やさない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-03",
+      "target": "clipErrorDetail / recordAttempt",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "error_detail を 500 コードポイントまでに切る",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "650 字の日本語、null",
+      "expected": "500 字、null",
+      "branches": [
+        "B1-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-03 clipErrorDetail と recordAttempt は error_detail を 500 コードポイントまでに切り詰める",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-04",
+      "target": "addDailyUsage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "複数のイベントにわたり calls と runs を積み上げる",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "isFirstOfEvent true・false・true",
+      "expected": "calls=3・runs=2、トークン・Neurons の合計",
+      "branches": [
+        "B3-F",
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-04 addDailyUsage は複数イベントにわたり calls と runs を正しく積み上げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-05",
+      "target": "addDailyMetrics",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "渡された列だけを加算し、他の列を保つ",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "6 回の加算",
+      "expected": "各列の合計",
+      "branches": [
+        "B5-T",
+        "B5-F",
+        "B6-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-05 addDailyMetrics は渡された列だけを加算し、他の列を維持する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS63_DEV-06",
+      "target": "metricsForSucceededAction",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "行動ごとの daily_metrics の加算値",
+      "precondition": "なし",
+      "input": "post・reply・like・follow・unfollow・none",
+      "expected": "各加算値",
+      "branches": [
+        "B7-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-63）",
+      "suspect": "",
+      "test_name": "TC-NOUS63_DEV-06 metricsForSucceededAction は行動ごとの daily_metrics 加算値を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-001",
+      "target": "clipErrorDetail",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "500 字以下ならそのまま、501 字なら 500 字に切る",
+      "precondition": "なし",
+      "input": "499・500・501 字",
+      "expected": "499・500・500 字",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS63_DEV-03（650 字だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_USG-001 clipErrorDetail は 500 字以下ならそのまま、501 字なら 500 字に切る（$length 字）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-002",
+      "target": "clipErrorDetail",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "undefined なら null を返す",
+      "precondition": "なし",
+      "input": "undefined",
+      "expected": "null",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS63_DEV-03（null だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_USG-002 clipErrorDetail は undefined なら null を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-003",
+      "target": "clipErrorDetail",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "サロゲートペアの字をコードポイントで数え、字の途中で切らない",
+      "precondition": "なし",
+      "input": "絵文字 501 字",
+      "expected": "絵文字 500 字",
+      "branches": [
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-03 は BMP の字だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_USG-003 clipErrorDetail はサロゲートペアの字をコードポイントで数え、字の途中で切らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-004",
+      "target": "addDailyMetrics",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "空の差分なら、行が無ければ 0 の行を作り、行があれば何も変えない",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "{} → {runs:2} → {}",
+      "expected": "最初は 0 の行、最後は runs=2 のまま 1 行",
+      "branches": [
+        "B5-F",
+        "B6-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_USG-004 addDailyMetrics は空の差分なら、行が無いときは 0 の行を作り、行があるときは何も変えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-005",
+      "target": "recordAttempt",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "isFirstOfEvent を省略すると attemptNo が 1 のときだけ runs を加算する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "attemptNo=1・2（isFirstOfEvent なし）",
+      "expected": "runs=1・0",
+      "branches": [
+        "B9-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS63_DEV-02",
+      "suspect": "",
+      "test_name": "TC-UT_USG-005 recordAttempt は isFirstOfEvent を省略すると attemptNo が 1 のときだけ runs を加算する（attemptNo=$attemptNo）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-006",
+      "target": "recordAttempt",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "isFirstOfEvent を明示すると attemptNo より優先する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "attemptNo=1 で false、attemptNo=3 で true",
+      "expected": "runs=0 → 1",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_USG-006 recordAttempt は isFirstOfEvent を明示すると attemptNo より優先する（1 回目で false なら runs は 0、3 回目で true なら 1）",
+      "result": "",
+      "note": "設計書 4章：再生成・再試行では false"
+    },
+    {
+      "id": "TC-UT_USG-007",
+      "target": "addDailyUsage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "runs を直接渡すと isFirstOfEvent より優先する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "isFirstOfEvent=true、runs=0",
+      "expected": "calls=1・runs=0",
+      "branches": [
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_USG-007 addDailyUsage は runs を直接渡すと isFirstOfEvent より優先する",
+      "result": "",
+      "note": "設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_USG-008",
+      "target": "addDailyUsage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "入力を省略すると calls だけ 1 加算する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "入力なし",
+      "expected": "calls=1、runs・トークン・Neurons は 0",
+      "branches": [
+        "B3-F",
+        "B4-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_USG-008 addDailyUsage は入力を省略すると calls だけ 1 加算し、runs・トークン・Neurons は 0 にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-009",
+      "target": "recordAttempt",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "所要時間が負なら 0、小数なら切り捨てて記録する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "durationMs=-5・12.9",
+      "expected": "duration_ms=0・12",
+      "branches": [
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_USG-009 recordAttempt は所要時間が負なら 0、小数なら切り捨てて記録する",
+      "result": "",
+      "note": "DB の CHECK（duration_ms >= 0）を満たすため"
+    },
+    {
+      "id": "TC-UT_USG-010",
+      "target": "recordAttempt",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "usageDate が違えば daily_usage の別の行に加算する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "2026-10-22 と 2026-10-23",
+      "expected": "日ごとに 1 行ずつ",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_USG-010 recordAttempt は usageDate が違えば daily_usage の別の行に加算する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-011",
+      "target": "recordAttempt",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "試行の INSERT が CHECK 違反（attempt_no=5）なら daily_usage と生成イベントの合計を変えない",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "attemptNo=5",
+      "expected": "例外、試行 0 件、daily_usage 0 件、生成イベントの合計 0",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_USG-011 recordAttempt は試行の INSERT が CHECK 違反（attempt_no=5）なら daily_usage と生成イベントの合計を変えない",
+      "result": "",
+      "note": "設計書 6章：recordAttempt は 1 トランザクション"
+    },
+    {
+      "id": "TC-UT_USG-012",
+      "target": "recordAttempt",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "不正な形式の試行もトークンと Neurons を試行・daily_usage・生成イベントに加算する",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "result=invalid_format、トークン 600・40、Neurons 6.5",
+      "expected": "試行・daily_usage・生成イベントにトークン 600・40、Neurons 6.5",
+      "branches": [
+        "B8-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-02 は 0 を期待）",
+      "suspect": "実装は ok 以外のトークン・Neurons を 0 にする（疑い 1）",
+      "test_name": "TC-UT_USG-012 不正な形式の試行（LLM は応答している）もトークンと Neurons を試行・daily_usage・生成イベントに加算する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_USG-013",
+      "target": "recordAttempt",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "同じ生成イベントの ok の試行が続けば、生成イベントのトークン・Neurons を積み上げる",
+      "precondition": "一時 DB（createTestDb）",
+      "input": "ok を 2 回",
+      "expected": "生成イベント 1000・50・10",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_USG-013 recordAttempt は同じ生成イベントの ok の試行が続けば、生成イベントのトークン・Neurons を積み上げる",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
