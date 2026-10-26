@@ -1,0 +1,712 @@
+{
+  "ticket": "NOUS-99",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "P202 実行制御（apps/admin/src/pages/RunControlPage.tsx・pages/runControl）",
+  "targets": [
+    "apps/admin/src/pages/RunControlPage.tsx",
+    "apps/admin/src/pages/runControl/ControlButtons.tsx",
+    "apps/admin/src/pages/runControl/ResetDialog.tsx",
+    "apps/admin/src/pages/runControl/UsageCard.tsx",
+    "apps/admin/src/pages/runControl/WorldStatusCard.tsx",
+    "apps/admin/src/pages/runControl/RecentAuditTable.tsx"
+  ],
+  "test_files": [
+    "apps/admin/src/pages/RunControlPage.test.tsx（実装時、NOUS-69）",
+    "apps/admin/src/pages/RunControlPage.ut.test.tsx（単体テストで追加）"
+  ],
+  "dependencies": [
+    "fetch（mockFetch・vi.stubGlobal）",
+    "TanStack Query（世界の状態・最近の操作）",
+    "Intl.DateTimeFormat（Asia/Tokyo）"
+  ],
+  "design_refs": [
+    "画面基本設計書 P202（H01〜H18、E01〜E09、6章のエラーの文言）",
+    "FE 詳細設計 admin_control 4章 requestAction・runAction・buttonStates・submitReset・usageLevel、6章",
+    "基本設計書（概要）6章 世界の状態"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "conflictMessageFor：STATE_CONFLICT",
+      "location": "RunControlPage.tsx:35"
+    },
+    {
+      "id": "B2",
+      "condition": "conflictMessageFor：NO_AGENTS",
+      "location": "RunControlPage.tsx:38"
+    },
+    {
+      "id": "B3",
+      "condition": "conflictMessageFor：GENERATION_RUNNING",
+      "location": "RunControlPage.tsx:41"
+    },
+    {
+      "id": "B4",
+      "condition": "runAction：start",
+      "location": "RunControlPage.tsx:72"
+    },
+    {
+      "id": "B5",
+      "condition": "runAction：pause",
+      "location": "RunControlPage.tsx:76"
+    },
+    {
+      "id": "B6",
+      "condition": "runAction：resume",
+      "location": "RunControlPage.tsx:80"
+    },
+    {
+      "id": "B7",
+      "condition": "runAction：emergency",
+      "location": "RunControlPage.tsx:84"
+    },
+    {
+      "id": "B8",
+      "condition": "runAction：API のエラー（catch）",
+      "location": "RunControlPage.tsx:90"
+    },
+    {
+      "id": "B9",
+      "condition": "requestAction：pause（確認なし）",
+      "location": "RunControlPage.tsx:102"
+    },
+    {
+      "id": "B10",
+      "condition": "requestAction：start（確認のダイアログ）",
+      "location": "RunControlPage.tsx:106"
+    },
+    {
+      "id": "B11",
+      "condition": "requestAction：resume",
+      "location": "RunControlPage.tsx:116"
+    },
+    {
+      "id": "B12",
+      "condition": "requestAction：緊急停止からの再開（確認のダイアログ）",
+      "location": "RunControlPage.tsx:117"
+    },
+    {
+      "id": "B13",
+      "condition": "requestAction：emergency（確認のダイアログ）",
+      "location": "RunControlPage.tsx:130"
+    },
+    {
+      "id": "B14",
+      "condition": "handleResetConfirm：API のエラー（catch）",
+      "location": "RunControlPage.tsx:153"
+    },
+    {
+      "id": "B15",
+      "condition": "handleResetConfirm：エラーが fields を返した（400、ダイアログに出す）",
+      "location": "RunControlPage.tsx:158"
+    },
+    {
+      "id": "B16",
+      "condition": "世界の状態を取得済み",
+      "location": "RunControlPage.tsx:175"
+    },
+    {
+      "id": "B17",
+      "condition": "buttonStates：開始を押せる（準備中かつ体数 > 0）",
+      "location": "runControl/ControlButtons.tsx:14"
+    },
+    {
+      "id": "B18",
+      "condition": "buttonStates：開始を押せない理由が「準備中でない」",
+      "location": "runControl/ControlButtons.tsx:17"
+    },
+    {
+      "id": "B19",
+      "condition": "buttonStates：一時停止を押せる（稼働・上限停止）",
+      "location": "runControl/ControlButtons.tsx:25"
+    },
+    {
+      "id": "B20",
+      "condition": "buttonStates：再開を押せる（一時停止・緊急停止）",
+      "location": "runControl/ControlButtons.tsx:39"
+    },
+    {
+      "id": "B21",
+      "condition": "buttonStates：緊急停止を押せる（稼働・一時停止・上限停止）",
+      "location": "runControl/ControlButtons.tsx:53"
+    },
+    {
+      "id": "B22",
+      "condition": "buttonStates：リセットを押せる（一時停止・上限停止・緊急停止）",
+      "location": "runControl/ControlButtons.tsx:65"
+    },
+    {
+      "id": "B23",
+      "condition": "ResetDialog：入力が世界の名前と一致しない",
+      "location": "runControl/ResetDialog.tsx:23"
+    },
+    {
+      "id": "B24",
+      "condition": "ResetDialog：onConfirm が文言を返した（入力欄の下に出す）",
+      "location": "runControl/ResetDialog.tsx:31"
+    },
+    {
+      "id": "B25",
+      "condition": "usageLevel：上限が 0 以下",
+      "location": "runControl/UsageCard.tsx:8"
+    },
+    {
+      "id": "B26",
+      "condition": "usageLevel：比が 1 以上",
+      "location": "runControl/UsageCard.tsx:10"
+    },
+    {
+      "id": "B27",
+      "condition": "usageLevel：比が 0.8 以上",
+      "location": "runControl/UsageCard.tsx:11"
+    },
+    {
+      "id": "B28",
+      "condition": "WorldStatusCard：状態が稼働（次の巡の予定を出す）",
+      "location": "runControl/WorldStatusCard.tsx:24"
+    },
+    {
+      "id": "B29",
+      "condition": "formatNextCycleAt：予定がない",
+      "location": "runControl/WorldStatusCard.tsx:11"
+    },
+    {
+      "id": "B30",
+      "condition": "WorldStatusCard：停止理由がある",
+      "location": "runControl/WorldStatusCard.tsx:23"
+    },
+    {
+      "id": "B31",
+      "condition": "RecentAuditTable：対象の ID がある",
+      "location": "runControl/RecentAuditTable.tsx:57"
+    }
+  ],
+  "issues": [
+    "疑い 1：P202 6章の 409 NO_AGENTS は「P203 へのリンクを添える」だが、様式②は文言だけでリンクがない（ErrorBanner は文字列だけを受ける）。TC-UT_P202-008 はリンクを期待するので、実施では NG になる見込み",
+    "疑い 2：P202 E01 の「様式①: 500 は「状態を取得できませんでした」」が実装されていない。世界の状態の取得が失敗すると「世界の状態を読み込み中…」のままになり、3 回続けて失敗したときに様式②「最新の状態を取得できていません」が出るだけ。TC-UT_P202-013 は仕様どおり様式①を期待するので、実施では NG になる見込み",
+    "確認事項 1：P202 H17 は「一致するまで確定を押せない」だが、実装は押してから「世界の名前が一致しません」を出す（FE 詳細設計 submitReset に合わせた。NOUS-69 で Takaya Ishikawa さんが判断を書き、再鑑で完了）。どちらを正とするかは画面設計書の更新で揃えるのがよい。TC-NOUS69_DEV-14 は実装の形で確かめている",
+    "確認事項 2：P202 H04（巡の番号）の表示条件は「稼働した世界」だが、準備中の世界でも「第 0 巡」を出す",
+    "確認事項 3：P202 E05 で、再開の結果が上限停止（理由つき）になったときも、トーストは「再開しました」になる。状態の枠には上限停止と理由が出るため誤りではないが、トーストの文言は設計書に記載がない",
+    "確認事項 4：409 GENERATION_RUNNING の文言「実行中の生成があります。終わってから操作してください」と、押せないボタンの理由（リセットの2つ以外）は設計書に記載がなく、実装の値を期待結果にした",
+    "確認事項 5：通らない分岐。conflictMessageFor の 3 つのコード以外（B3-F）は、世界の操作の API が 409 でこの3つしか返さないため通らない。runAction の emergency でもない（B7-F）と requestAction の reset でもない（RunControlPage.tsx:140 の偽）は、action の型が 5 つに限られるため通らない"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS69_DEV-08",
+      "target": "buttonStates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "準備中でリセットを無効にし理由を返し、体数 0 では開始も無効にする",
+      "precondition": "なし",
+      "input": "preparing・体数 3、preparing・体数 0",
+      "expected": "開始だけ有効、リセットは「まだ開始していない世界はリセットできません」、体数 0 は開始も無効で「エージェントが 0 体のため開始できません」",
+      "branches": [
+        "B17-T",
+        "B17-F",
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B21-F",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-08 buttonStates は準備中（preparing）でリセットを無効にし理由を返し、体数 0 では開始も無効にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-09",
+      "target": "buttonStates",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "稼働中でリセットを無効にし、一時停止・上限停止・緊急停止ではリセットを有効にする",
+      "precondition": "なし",
+      "input": "running、paused、limit_stopped、emergency_stopped",
+      "expected": "running のリセットは「先に一時停止してください」、ほかは有効",
+      "branches": [
+        "B18-T",
+        "B19-T",
+        "B21-T",
+        "B22-T",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-09 buttonStates は稼働中でリセットを無効にし、一時停止・上限停止・緊急停止ではリセットを有効にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-10",
+      "target": "usageLevel",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "比が 0.8 未満で normal、0.8 以上 1.0 未満で warning、1.0 以上で danger",
+      "precondition": "なし",
+      "input": "799・800・999・1000・1200 / 1000",
+      "expected": "normal・warning・warning・danger・danger",
+      "branches": [
+        "B25-F",
+        "B26-T",
+        "B26-F",
+        "B27-T",
+        "B27-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-10 usageLevel は比が 0.8 未満で normal、0.8 以上 1.0 未満で warning、1.0 以上で danger を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-11",
+      "target": "RunControlPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "準備中の画面ではリセットのボタンが disabled になり、下に押せない理由を表示する",
+      "precondition": "world preparing・体数 0",
+      "input": "/",
+      "expected": "リセット・開始が disabled、理由の文言",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-11 P202 準備中の画面ではリセットのボタンが disabled になり、下に押せない理由を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-12",
+      "target": "RunControlPage（一時停止）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "一時停止は確認ダイアログなしで POST /admin/api/world/pause を送りトーストを表示する",
+      "precondition": "world running",
+      "input": "一時停止を押す",
+      "expected": "ダイアログなし、POST pause、トースト",
+      "branches": [
+        "B9-T",
+        "B4-F",
+        "B5-T",
+        "B8-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-12 P202 一時停止は確認ダイアログなしで POST /admin/api/world/pause を送りトーストを表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-13",
+      "target": "RunControlPage（緊急停止）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "緊急停止は確認ダイアログを経て POST /admin/api/world/emergency-stop を送りトーストを表示する",
+      "precondition": "world running",
+      "input": "緊急停止 → 確定",
+      "expected": "ConfirmDialog、POST emergency-stop、「緊急停止しました。取り消した生成 N 件」",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B11-F",
+        "B13-T",
+        "B4-F",
+        "B5-F",
+        "B6-F",
+        "B7-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-13 P202 緊急停止は確認ダイアログを経て POST /admin/api/world/emergency-stop を送りトーストを表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-14",
+      "target": "ResetDialog",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "世界の名前が一致しないときは「世界の名前が一致しません」を表示し送信しない",
+      "precondition": "world paused",
+      "input": "リセット → 違う名前で確定",
+      "expected": "文言、POST reset なし",
+      "branches": [
+        "B13-F",
+        "B23-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-14 P202 リセットのダイアログで世界の名前が一致しないときは「世界の名前が一致しません」を表示し送信しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-15",
+      "target": "ResetDialog / handleResetConfirm",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "世界の名前が一致したときは POST /admin/api/world/reset を送りトーストを表示する",
+      "precondition": "world paused",
+      "input": "リセット → 一致した名前で確定",
+      "expected": "POST reset、「リセットしました。前の世界はアーカイブにあります」",
+      "branches": [
+        "B23-F",
+        "B14-F",
+        "B24-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-15 P202 リセットのダイアログで世界の名前が一致したときは POST /admin/api/world/reset を送りトーストを表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P202-001",
+      "target": "buttonStates",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "状態ごとに、押せるボタンが FE 詳細設計 4章 buttonStates のとおりになる",
+      "precondition": "体数 1",
+      "input": "6 状態（archived を含む）",
+      "expected": "preparing は開始、running は一時停止・緊急停止、paused は再開・緊急停止・リセット、limit_stopped は一時停止・緊急停止・リセット、emergency_stopped は再開・リセット、archived はなし。押せるものは理由 null",
+      "branches": [
+        "B17-T",
+        "B17-F",
+        "B19-T",
+        "B19-F",
+        "B20-T",
+        "B20-F",
+        "B21-T",
+        "B21-F",
+        "B22-T",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS69_DEV-08・09（preparing と running とリセットだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P202-001 状態ごとに、押せるボタンが FE 詳細設計 4章 buttonStates のとおりになる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P202-002",
+      "target": "buttonStates",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "押せないボタンには、状態に応じた理由の文言を付ける",
+      "precondition": "体数 1",
+      "input": "13 の (状態, 操作) の組",
+      "expected": "各組の理由の文言",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS69_DEV-08・09（開始とリセットの理由だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P202-002 押せないボタンには、状態に応じた理由の文言を付ける",
+      "result": "",
+      "note": "リセットの 2 つ以外の文言は設計書に記載なし。実装の値（確認事項 4）"
+    },
+    {
+      "id": "TC-UT_P202-003",
+      "target": "usageLevel",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "上限が 0 以下なら使用量に関係なく danger にする",
+      "precondition": "なし",
+      "input": "(0, 0)、(10, -1)",
+      "expected": "danger、danger",
+      "branches": [
+        "B25-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-003 usageLevel は上限が 0 以下なら使用量に関係なく danger にする",
+      "result": "",
+      "note": "上限 0 以下は設計書に記載なし（入力の検証で 1 以上）。実装の値"
+    },
+    {
+      "id": "TC-UT_P202-004",
+      "target": "RunControlPage（開始）",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "開始は「世界を開始します。よろしいですか」の確認を出し、キャンセルなら送らず、確定で送って「開始しました」を出す",
+      "precondition": "world preparing",
+      "input": "開始 → キャンセル → 開始 → 開始する",
+      "expected": "キャンセルでは POST 0 回、確定で POST start 1 回とトースト「開始しました」",
+      "branches": [
+        "B10-T",
+        "B4-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし（開始の操作は DEV にない）",
+      "suspect": "",
+      "test_name": "TC-UT_P202-004 開始は「世界を開始します。よろしいですか」の確認を出し、キャンセルなら送らず、確定で送って「開始しました」を出す",
+      "result": "",
+      "note": "P202 E03"
+    },
+    {
+      "id": "TC-UT_P202-005",
+      "target": "RunControlPage（再開）",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "一時停止からの再開は確認を出さずに送り、「再開しました」を出す",
+      "precondition": "world paused",
+      "input": "再開を押す",
+      "expected": "ダイアログなし、POST resume、トースト「再開しました」",
+      "branches": [
+        "B11-T",
+        "B12-F",
+        "B4-F",
+        "B5-F",
+        "B6-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-005 一時停止からの再開は確認を出さずに送り、「再開しました」を出す",
+      "result": "",
+      "note": "P202 E05"
+    },
+    {
+      "id": "TC-UT_P202-006",
+      "target": "RunControlPage（再開）",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "緊急停止からの再開は「状況を確認しましたか」の確認を出し、確定するまで送らない",
+      "precondition": "world emergency_stopped",
+      "input": "再開 → 再開する",
+      "expected": "確定の前は POST 0 回、確定で 1 回",
+      "branches": [
+        "B12-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-006 緊急停止からの再開は「状況を確認しましたか」の確認を出し、確定するまで送らない",
+      "result": "",
+      "note": "P202 E05（Q-207）"
+    },
+    {
+      "id": "TC-UT_P202-007",
+      "target": "RunControlPage（409）",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "操作が 409 STATE_CONFLICT なら P202 の文言を様式②に出し、世界の状態を取り直す",
+      "precondition": "world running",
+      "input": "一時停止 → 409 STATE_CONFLICT",
+      "expected": "様式②「世界の状態が変わったため、操作できませんでした。最新の状態を表示します」、GET world が増える",
+      "branches": [
+        "B8-T",
+        "B1-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-007 操作が 409 STATE_CONFLICT なら P202 の文言を様式②に出し、世界の状態を取り直す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P202-008",
+      "target": "RunControlPage（409）",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "開始が 409 NO_AGENTS なら P202 の文言を様式②に出し、エージェントの画面（P203）へのリンクを添える",
+      "precondition": "world preparing",
+      "input": "開始 → 開始する → 409 NO_AGENTS",
+      "expected": "様式②「エージェントが登録されていません…」と /agents へのリンク",
+      "branches": [
+        "B8-T",
+        "B1-F",
+        "B2-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "リンクがない（疑い 1）",
+      "test_name": "TC-UT_P202-008 開始が 409 NO_AGENTS なら P202 の文言を様式②に出し、エージェントの画面（P203）へのリンクを添える",
+      "result": "",
+      "note": "P202 6章 409 NO_AGENTS の補足"
+    },
+    {
+      "id": "TC-UT_P202-009",
+      "target": "RunControlPage（500）",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "操作が 500 なら様式①「操作に失敗しました。状態を確かめてからやり直してください」を出す",
+      "precondition": "world running",
+      "input": "一時停止 → 500",
+      "expected": "様式① の文言と OK",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-009 操作が 500 なら様式①「操作に失敗しました。状態を確かめてからやり直してください」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P202-010",
+      "target": "RunControlPage（リセット）",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "リセットがサーバーで 400 CONFIRM_MISMATCH なら、ダイアログを閉じずに入力欄の下へ文言を出す",
+      "precondition": "world paused",
+      "input": "一致した名前で確定 → 400 CONFIRM_MISMATCH（fields なし）",
+      "expected": "ダイアログは開いたまま、入力欄の下に「世界の名前が一致しません」",
+      "branches": [
+        "B14-T",
+        "B15-T",
+        "B24-T",
+        "B23-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS69_DEV-14（画面の中の不一致だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P202-010 リセットがサーバーで 400 CONFIRM_MISMATCH なら、ダイアログを閉じずに入力欄の下へ文言を出す",
+      "result": "",
+      "note": "P202 E08 様式④"
+    },
+    {
+      "id": "TC-UT_P202-011",
+      "target": "RunControlPage（リセット）",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "リセットが 409 GENERATION_RUNNING ならダイアログを閉じ、様式②に文言を出す",
+      "precondition": "world paused",
+      "input": "一致した名前で確定 → 409 GENERATION_RUNNING",
+      "expected": "ダイアログを閉じ、様式②「実行中の生成があります。終わってから操作してください」",
+      "branches": [
+        "B14-T",
+        "B15-F",
+        "B1-F",
+        "B2-F",
+        "B3-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-011 リセットが 409 GENERATION_RUNNING ならダイアログを閉じ、様式②に文言を出す",
+      "result": "",
+      "note": "文言は設計書に記載なし。実装の値（確認事項 4）"
+    },
+    {
+      "id": "TC-UT_P202-012",
+      "target": "RunControlPage",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "操作の送信中は、ほかの操作のボタンもすべて押せなくする",
+      "precondition": "world running、pause は返らない",
+      "input": "一時停止を押す",
+      "expected": "実行制御の操作のボタンがすべて disabled",
+      "branches": [
+        "B9-T",
+        "B5-T"
+      ],
+      "mock": "fetch を返らない Promise に差し替え、renderApp",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-012 操作の送信中は、ほかの操作のボタンもすべて押せなくする",
+      "result": "",
+      "note": "FE 詳細設計 3章 pendingAction"
+    },
+    {
+      "id": "TC-UT_P202-013",
+      "target": "RunControlPage（E01）",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "ページを開いたときに世界の状態の取得が 500 なら、様式①「状態を取得できませんでした」を出す",
+      "precondition": "GET world 500",
+      "input": "/",
+      "expected": "様式①「状態を取得できませんでした」",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "実装されていない（疑い 2）",
+      "test_name": "TC-UT_P202-013 ページを開いたときに世界の状態の取得が 500 なら、様式①「状態を取得できませんでした」を出す",
+      "result": "",
+      "note": "P202 E01"
+    },
+    {
+      "id": "TC-UT_P202-014",
+      "target": "WorldStatusCard",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "次の巡の予定は稼働のときだけ JST の HH:MM で出し、それ以外は「―」にする",
+      "precondition": "world running（05:40Z）、paused（manual_pause）、running（予定なし）",
+      "input": "/",
+      "expected": "running は 14:40・停止理由「―」、paused は「―」と「一時停止」、予定なしは「―」。体数「稼働 9 体・停止 1 体」と「第 22 巡」",
+      "branches": [
+        "B28-T",
+        "B28-F",
+        "B29-T",
+        "B29-F",
+        "B30-T",
+        "B30-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-014 次の巡の予定は稼働のときだけ JST の HH:MM で出し、それ以外は「―」にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P202-015",
+      "target": "UsageCard",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "利用量は上限の 80% 以上で黄、100% で赤にし、実行中の生成の数と概算費用 0 円を出す",
+      "precondition": "Neurons 7,600 / 9,500、回数 480 / 480、実行中 2",
+      "input": "/",
+      "expected": "neurons-bar は warning、runs-bar は danger、「実行中 2」「概算費用：0 円」",
+      "branches": [
+        "B26-T",
+        "B27-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS69_DEV-10（関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P202-015 利用量は上限の 80% 以上で黄、100% で赤にし、実行中の生成の数と概算費用 0 円を出す",
+      "result": "",
+      "note": "P202 H08〜H11"
+    },
+    {
+      "id": "TC-UT_P202-016",
+      "target": "RecentAuditTable",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "最近の操作は操作の種類を日本語にし、時刻を JST、対象を「種類 (ID)」（ID がなければ種類だけ）で出し、0 件なら「操作履歴はありません」",
+      "precondition": "なし",
+      "input": "world.emergency_stop（targetId あり）と admin.login（targetId なし）、その後 0 件",
+      "expected": "1 行目は 14:40・緊急停止・world (01JWORLD)、2 行目は管理ログイン・admin、0 件で「操作履歴はありません」",
+      "branches": [
+        "B31-T",
+        "B31-F"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P202-016 最近の操作は操作の種類を日本語にし、時刻を JST、対象を「種類 (ID)」（ID がなければ種類だけ）で出し、0 件なら「操作履歴はありません」",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
