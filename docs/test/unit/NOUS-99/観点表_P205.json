@@ -1,0 +1,755 @@
+{
+  "ticket": "NOUS-99",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "P205 実行設定（apps/admin/src/pages/RunSettingsPage.tsx・pages/runSettings）",
+  "targets": [
+    "apps/admin/src/pages/RunSettingsPage.tsx",
+    "apps/admin/src/pages/runSettings/estimate.ts",
+    "apps/admin/src/pages/runSettings/EstimatePanel.tsx",
+    "apps/admin/src/pages/runSettings/LimitWarning.tsx"
+  ],
+  "test_files": [
+    "apps/admin/src/pages/RunSettingsPage.test.tsx（実装時、NOUS-69）",
+    "apps/admin/src/pages/runSettings/estimate.test.ts（実装時、NOUS-69）",
+    "apps/admin/src/pages/RunSettingsPage.ut.test.tsx（単体テストで追加）",
+    "apps/admin/src/pages/runSettings/estimate.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "fetch（mockFetch）",
+    "TanStack Query（世界の状態の取り直し）",
+    "React Router（useBlocker）"
+  ],
+  "design_refs": [
+    "画面基本設計書 P205（H01〜H17、E01〜E06、6章のエラーの文言、7章の入力の検証）",
+    "FE 詳細設計 admin_control 4章 loadSettings・onFieldChange・validateSettingsField・computeEstimate・saveSettings・revertSettings・useUnsavedGuard、6章",
+    "BE 詳細設計 world 4章 estimateDaily（computeEstimate と同じ式）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "validateSettingsField：値が文字列",
+      "location": "RunSettingsPage.tsx:89"
+    },
+    {
+      "id": "B2",
+      "condition": "validateSettingsField：空、または 10 進の整数の形でない",
+      "location": "RunSettingsPage.tsx:91"
+    },
+    {
+      "id": "B3",
+      "condition": "validateSettingsField：文字列の値が範囲外",
+      "location": "RunSettingsPage.tsx:95"
+    },
+    {
+      "id": "B4",
+      "condition": "validateSettingsField：数値の値が整数でない・範囲外",
+      "location": "RunSettingsPage.tsx:101"
+    },
+    {
+      "id": "B5",
+      "condition": "useUnsavedGuard：変更がない（beforeunload を付けない）",
+      "location": "RunSettingsPage.tsx:127"
+    },
+    {
+      "id": "B6",
+      "condition": "loadSettings：モデルの一覧が空でない",
+      "location": "RunSettingsPage.tsx:178"
+    },
+    {
+      "id": "B7",
+      "condition": "loadSettings：版の一覧が空でない",
+      "location": "RunSettingsPage.tsx:179"
+    },
+    {
+      "id": "B8",
+      "condition": "loadSettings：401",
+      "location": "RunSettingsPage.tsx:182"
+    },
+    {
+      "id": "B9",
+      "condition": "loadSettings：500 以上・通信の失敗",
+      "location": "RunSettingsPage.tsx:184"
+    },
+    {
+      "id": "B10",
+      "condition": "loadSettings：404（何も出さない）",
+      "location": "RunSettingsPage.tsx:186"
+    },
+    {
+      "id": "B11",
+      "condition": "onFieldChange：数値の項目",
+      "location": "RunSettingsPage.tsx:208"
+    },
+    {
+      "id": "B12",
+      "condition": "onFieldChange：検証のエラーがある",
+      "location": "RunSettingsPage.tsx:212"
+    },
+    {
+      "id": "B13",
+      "condition": "saveSettings：検証のエラーがある（送らない）",
+      "location": "RunSettingsPage.tsx:238"
+    },
+    {
+      "id": "B14",
+      "condition": "saveSettings：stateChanged がある（トーストに足す）",
+      "location": "RunSettingsPage.tsx:253"
+    },
+    {
+      "id": "B15",
+      "condition": "saveSettings：500 以上",
+      "location": "RunSettingsPage.tsx:255"
+    },
+    {
+      "id": "B16",
+      "condition": "saveSettings：エラーが fields を返した（400）",
+      "location": "RunSettingsPage.tsx:260"
+    },
+    {
+      "id": "B17",
+      "condition": "読み込み中",
+      "location": "RunSettingsPage.tsx:280"
+    },
+    {
+      "id": "B18",
+      "condition": "移動が止められている（blocker.state が blocked）",
+      "location": "RunSettingsPage.tsx:447"
+    },
+    {
+      "id": "B19",
+      "condition": "computeEstimate：周期が 0 より大きい（1日の巡を計算する）",
+      "location": "runSettings/estimate.ts:24・57"
+    },
+    {
+      "id": "B20",
+      "condition": "computeEstimate：上限と 1巡の Neurons がともに 0 より大きい（周期の下限を計算する）",
+      "location": "runSettings/estimate.ts:62-63"
+    },
+    {
+      "id": "B21",
+      "condition": "computeEstimate：見込みの元をオブジェクトで受けた",
+      "location": "runSettings/estimate.ts:39-42"
+    },
+    {
+      "id": "B22",
+      "condition": "computeEstimate：1日の Neurons が上限を超える（overLimit）",
+      "location": "runSettings/estimate.ts:65"
+    },
+    {
+      "id": "B23",
+      "condition": "LimitWarning：overLimit なら出す",
+      "location": "runSettings/LimitWarning.tsx:14"
+    }
+  ],
+  "issues": [
+    "疑い 1：computeEstimate の周期の下限が、サーバーの estimateDaily と食い違う。FE 詳細設計 4章は「サーバーの estimateDaily と同じ式」としているが、サーバーは下限を 15 分（SETTINGS_RANGES の下限）より小さくせず、1巡の Neurons が 0 のときも 15 にする（NOUS-58 の決めたこと 5）。画面は ceil の値をそのまま出し（例：活動量 10% で 2 分）、1巡の Neurons が 0 なら 0 を出す。TC-UT_P205-001・002 はサーバーと同じ 15 を期待するので、実施では NG になる見込み。TC-NOUS69_DEV-19 は 0 を期待していて、仕様と合わない",
+    "確認事項 1：P205 H01 は直近 50 件に満たないとき「実測なし（見積もり 16.4）」と出すが、実装は平均の値（小数 1 桁）を出すだけ。GET /admin/api/settings は件数を返さず、サーバーは 20 件未満で 16.4 を返す（world.md 2章）。画面で見分けられないため、API に件数か実測かどうかを足すか、画面設計書の記載を直すかの確認",
+    "確認事項 2：設定の取得が 404 のとき何も出さない（TC-UT_P205-019）は設計書に記載がなく、実装の値を期待結果にした"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS69_DEV-16",
+      "target": "computeEstimate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "通常の入力で 1巡の回数・Neurons・1日の回数と Neurons・周期の下限を計算し overLimit=false を返す",
+      "precondition": "なし",
+      "input": "周期 20・活動量 100・上限 9,500、平均 15.8・10 体・0.6",
+      "expected": "6 回・95・72 巡・432 回・6,826・15 分・false",
+      "branches": [
+        "B19-T",
+        "B20-T",
+        "B21-F",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-16 computeEstimate は通常の入力で 1巡の回数・Neurons・1日の回数と Neurons・周期の下限を計算し overLimit=false を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-17",
+      "target": "computeEstimate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "1日の見込み Neurons が日次上限を超えるとき overLimit=true を返す",
+      "precondition": "なし",
+      "input": "周期 15・上限 5,000",
+      "expected": "9,101、true",
+      "branches": [
+        "B22-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-17 computeEstimate は 1日の見込み Neurons が日次上限を超えるとき overLimit=true を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-18",
+      "target": "computeEstimate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "日次上限と 1巡の Neurons から周期の下限（ceil）を逆算する",
+      "precondition": "なし",
+      "input": "周期 30・活動量 50・上限 3,000、平均 20・10 体・0.5",
+      "expected": "1巡 50、下限 24 分",
+      "branches": [
+        "B20-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-18 computeEstimate は日次上限と 1巡の Neurons から周期の下限（ceil）を逆算する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-19",
+      "target": "computeEstimate",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "周期 0・体数 0・上限 0 でも 0 除算を起こさず有限の値を返す",
+      "precondition": "なし",
+      "input": "すべて 0",
+      "expected": "0・0・0・false",
+      "branches": [
+        "B19-F",
+        "B20-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "周期の下限 0 を期待しているが、サーバーと同じ式なら 15（疑い 1）",
+      "test_name": "TC-NOUS69_DEV-19 computeEstimate は周期 0・体数 0・上限 0 でも 0 除算を起こさず有限の値を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-20",
+      "target": "validateSettingsField",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "全 9 項目の境界値と整数判定を行う",
+      "precondition": "なし",
+      "input": "各項目の min-1・min・max・max+1、\"20.5\"、\"\"",
+      "expected": "範囲外は「{min}〜{max} の整数で入力してください」、範囲内は null",
+      "branches": [
+        "B1-T",
+        "B1-F",
+        "B2-T",
+        "B4-T",
+        "B4-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-20 validateSettingsField は全 9 項目の境界値と整数判定を行う",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-21",
+      "target": "RunSettingsPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "入力値の変更で見込みを再計算し、上限超過で LimitWarning を表示し、元に戻すで初期値に復帰する",
+      "precondition": "settings 200（取得が終わるまでは読み込み中）",
+      "input": "Neurons の日次上限を 5,000 → 元に戻す",
+      "expected": "注意を表示し、元に戻すで 9,500 と注意なし",
+      "branches": [
+        "B6-T",
+        "B7-T",
+        "B11-T",
+        "B12-F",
+        "B17-T",
+        "B17-F",
+        "B23-T",
+        "B23-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-21 P205 入力値の変更で見込みを再計算し、上限超過で LimitWarning を表示し、元に戻すで初期値に復帰する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-22",
+      "target": "RunSettingsPage（保存）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "保存成功で PUT を送りトーストを表示し、stateChanged があれば追記する",
+      "precondition": "settings 200、PUT 200（stateChanged あり）",
+      "input": "周期 30 で保存",
+      "expected": "PUT、「保存しました。周期と活動量は次の巡から反映します。上限停止が解けました」",
+      "branches": [
+        "B13-F",
+        "B14-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-22 P205 保存成功で PUT /admin/api/settings を送りトーストを表示し、stateChanged があれば追記する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-23",
+      "target": "RunSettingsPage（保存）",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "保存時の 400 VALIDATION_ERROR でサーバーの fields の文言を各入力欄の下に表示する",
+      "precondition": "settings 200、PUT 400（fields）",
+      "input": "保存",
+      "expected": "各欄の下に fields の文言",
+      "branches": [
+        "B15-F",
+        "B16-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-23 P205 保存時の 400 VALIDATION_ERROR でサーバーの fields のエラー文言を各入力欄の下に表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-24",
+      "target": "useUnsavedGuard",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "未保存の変更がある状態で画面移動すると ConfirmDialog を表示する",
+      "precondition": "settings 200",
+      "input": "値を変えてサイドメニューで移動",
+      "expected": "「変更が保存されていません。移動しますか」",
+      "branches": [
+        "B5-F",
+        "B18-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-24 P205 未保存の変更がある状態で画面移動すると ConfirmDialog を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P205-001",
+      "target": "computeEstimate",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "計算した周期の下限が 15 分を下回るときは、サーバーの estimateDaily と同じく 15 分にする",
+      "precondition": "なし",
+      "input": "周期 20・活動量 10・上限 9,500、平均 15.8・10 体・0.6",
+      "expected": "dailyRuns 43、dailyNeurons 683、周期の下限 15",
+      "branches": [
+        "B20-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は下限がちょうど 15 以上になる入力だけ）",
+      "suspect": "実装は 2（ceil(1440÷(9500÷9.48))）を返す。疑い 1",
+      "test_name": "TC-UT_P205-001 計算した周期の下限が 15 分を下回るときは、サーバーの estimateDaily と同じく 15 分にする",
+      "result": "",
+      "note": "サーバーの値は TC-UT_WLD-043（NOUS-97）と同じ入力"
+    },
+    {
+      "id": "TC-UT_P205-002",
+      "target": "computeEstimate",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "1巡の Neurons が 0（稼働中のエージェントが 0 体）のときは、サーバーの estimateDaily と同じく周期の下限を 15 分にする",
+      "precondition": "なし",
+      "input": "体数 0・参加 0、ほかは既定",
+      "expected": "dailyRuns 0、周期の下限 15",
+      "branches": [
+        "B20-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS69_DEV-19（0 を期待している）",
+      "suspect": "実装は 0 を返す。疑い 1",
+      "test_name": "TC-UT_P205-002 1巡の Neurons が 0（稼働中のエージェントが 0 体）のときは、サーバーの estimateDaily と同じく周期の下限を 15 分にする",
+      "result": "",
+      "note": "サーバーは TC-NOUS58_DEV-02 で 15"
+    },
+    {
+      "id": "TC-UT_P205-003",
+      "target": "computeEstimate",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "見込みの元（SettingsEstimateBasis）をまとめて渡しても、数値を別々に渡したときと同じ結果にする",
+      "precondition": "なし",
+      "input": "{ avgNeuronsPerRun 15.8, activeAgents 10, avgParticipation 0.6 }",
+      "expected": "数値で渡したときと同じ",
+      "branches": [
+        "B21-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-003 見込みの元（SettingsEstimateBasis）をまとめて渡しても、数値を別々に渡したときと同じ結果にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P205-004",
+      "target": "computeEstimate",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "入力欄の文字列はそのまま数値として計算し、周期が空なら 1日の巡を 0 として 0 除算にしない",
+      "precondition": "なし",
+      "input": "\"20\"・\"100\"・\"9500\"、周期 \"\"",
+      "expected": "文字列は数値と同じ 432・6,826、空の周期は 0・0・0・false",
+      "branches": [
+        "B19-T",
+        "B19-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS69_DEV-19（数値の 0 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P205-004 入力欄の文字列はそのまま数値として計算し、周期が空なら 1日の巡を 0 として 0 除算にしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P205-005",
+      "target": "computeEstimate",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "1日の見込みの Neurons が上限ちょうどなら超えないとし、上限を 1 下回ると超えるとする",
+      "precondition": "なし",
+      "input": "周期 20・活動量 100、平均 10・1 体・1、上限 720 と 719",
+      "expected": "dailyNeurons 720、上限 720 で false、719 で true",
+      "branches": [
+        "B22-T",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS69_DEV-16・17（境界から離れた値）",
+      "suspect": "",
+      "test_name": "TC-UT_P205-005 1日の見込みの Neurons が上限ちょうどなら超えないとし、上限を 1 下回ると超えるとする",
+      "result": "",
+      "note": "「1日の Neurons > Neurons の上限」（FE 詳細設計 4章）"
+    },
+    {
+      "id": "TC-UT_P205-006",
+      "target": "validateSettingsField",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "入力の文字列は前後の空白を除いて 10 進の整数だけを受け、指数・符号・小数点の表記は範囲外の文言にする",
+      "precondition": "なし",
+      "input": "\" 20 \"、\"020\"、\"1e2\"、\"+20\"、\"20.0\"（周期）",
+      "expected": "null、null、範囲外の文言 ×3",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS69_DEV-20（\"20.5\" と空だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P205-006 入力の文字列は前後の空白を除いて 10 進の整数だけを受け、指数・符号・小数点の表記は範囲外の文言にする",
+      "result": "",
+      "note": "「整数」の文字列の表記の扱いは設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_P205-007",
+      "target": "onFieldChange",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "範囲外を入力するとすぐ入力欄の下に文言を出し、範囲内に直すと消す",
+      "precondition": "settings 200",
+      "input": "活動量を 5 → 50",
+      "expected": "5 で「10〜100 の整数で入力してください」、50 で消える",
+      "branches": [
+        "B11-T",
+        "B12-T",
+        "B12-F",
+        "B3-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-007 範囲外を入力するとすぐ入力欄の下に文言を出し、範囲内に直すと消す",
+      "result": "",
+      "note": "P205 E02"
+    },
+    {
+      "id": "TC-UT_P205-008",
+      "target": "saveSettings",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "検証に通らない項目があるときに保存を押すと、PUT を送らずに文言を出したままにする",
+      "precondition": "settings 200",
+      "input": "並列数 4 で保存",
+      "expected": "PUT 0 回、「1〜3 の整数で入力してください」",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-008 検証に通らない項目があるときに保存を押すと、PUT を送らずに文言を出したままにする",
+      "result": "",
+      "note": "P205 E03「全項目が検証に通る」"
+    },
+    {
+      "id": "TC-UT_P205-009",
+      "target": "RunSettingsPage（H16・H17）",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "変更がないときは保存と元に戻すを押せず、値を変えると押せるようにする",
+      "precondition": "settings 200",
+      "input": "開いた直後、周期を 30 にした後",
+      "expected": "直後は両方 disabled、変更後は両方 enabled",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-009 変更がないときは保存と元に戻すを押せず、値を変えると押せるようにする",
+      "result": "",
+      "note": "P205 H16・H17「変更があるとき有効」"
+    },
+    {
+      "id": "TC-UT_P205-010",
+      "target": "onFieldChange / saveSettings",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "モデルとプロンプトの版を変えると、保存の PUT の本文にその値を入れる",
+      "precondition": "settings 200、PUT 200",
+      "input": "モデル qwen、版 v2 で保存",
+      "expected": "PUT の本文に modelId・promptVersion と cycleMinutes 20",
+      "branches": [
+        "B11-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-010 モデルとプロンプトの版を変えると、保存の PUT の本文にその値を入れる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P205-011",
+      "target": "saveSettings",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "保存が 500 なら様式①「保存に失敗しました。時間をおいて再度お試しください」を出し、入力は残す",
+      "precondition": "settings 200、PUT 500",
+      "input": "周期 30 で保存",
+      "expected": "様式① の文言、周期は 30 のまま",
+      "branches": [
+        "B15-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-011 保存が 500 なら様式①「保存に失敗しました。時間をおいて再度お試しください」を出し、入力は残す",
+      "result": "",
+      "note": "P205 6章"
+    },
+    {
+      "id": "TC-UT_P205-012",
+      "target": "loadSettings",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "ページを開いたときの設定の取得が 500 なら様式①「設定を取得できませんでした」を出す",
+      "precondition": "GET settings 500",
+      "input": "/settings",
+      "expected": "様式①「設定を取得できませんでした」",
+      "branches": [
+        "B8-F",
+        "B9-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-012 ページを開いたときの設定の取得が 500 なら様式①「設定を取得できませんでした」を出す",
+      "result": "",
+      "note": "P205 E01"
+    },
+    {
+      "id": "TC-UT_P205-013",
+      "target": "EstimatePanel",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "見込みの枠に、1回の平均・1巡・1日の見込み・周期の下限を出す",
+      "precondition": "settings 200（平均 15.8・10 体・0.6）",
+      "input": "/settings",
+      "expected": "「15.8 Neurons」「約 95 Neurons」「約 6,826 Neurons・約 432 回」「約 15 分」",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-013 見込みの枠に、1回の平均・1巡・1日の見込み・周期の下限を出す",
+      "result": "",
+      "note": "P205 H01〜H03"
+    },
+    {
+      "id": "TC-UT_P205-014",
+      "target": "saveSettings",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "保存の応答に stateChanged がなければ基本の文言だけのトーストを出し、世界の状態を取り直す",
+      "precondition": "settings 200、PUT 200（stateChanged null）",
+      "input": "周期 30 で保存",
+      "expected": "トーストは「保存しました。周期と活動量は次の巡から反映します」だけ、GET world が増える",
+      "branches": [
+        "B14-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS69_DEV-22（stateChanged ありだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P205-014 保存の応答に stateChanged がなければ基本の文言だけのトーストを出し、世界の状態を取り直す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P205-015",
+      "target": "useUnsavedGuard",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "未保存の確認で「移動する」を押すと移動し、「キャンセル」なら実行設定に残る",
+      "precondition": "settings 200",
+      "input": "周期を変え、実行制御へ → キャンセル → 実行制御へ → 移動する",
+      "expected": "キャンセルの後は /settings、移動するの後は /",
+      "branches": [
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS69_DEV-24（ダイアログが出ることだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P205-015 未保存の確認で「移動する」を押すと移動し、「キャンセル」なら実行設定に残る",
+      "result": "",
+      "note": "P205 E05"
+    },
+    {
+      "id": "TC-UT_P205-016",
+      "target": "saveSettings",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "保存が fields のない 400 なら、サーバーの message をボタンの上（様式④）に出す",
+      "precondition": "settings 200、PUT 400（fields なし）",
+      "input": "周期 30 で保存",
+      "expected": "「入力の内容を確認してください」",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS69_DEV-23（fields ありだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P205-016 保存が fields のない 400 なら、サーバーの message をボタンの上（様式④）に出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P205-017",
+      "target": "loadSettings",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "設定の応答のモデルと版の一覧が空なら、画面の既定の選択肢（モデル 2 値・v1）を使う",
+      "precondition": "settings 200（modelOptions・promptVersions が空）",
+      "input": "/settings",
+      "expected": "モデルは MODEL_OPTIONS の 2 値、版は v1",
+      "branches": [
+        "B6-F",
+        "B7-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-017 設定の応答のモデルと版の一覧が空なら、画面の既定の選択肢（モデル 2 値・v1）を使う",
+      "result": "",
+      "note": "設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_P205-018",
+      "target": "loadSettings",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "ページを開いたときの設定の取得が 401 なら、様式①「ログインの有効期限が切れました…」を出す",
+      "precondition": "GET settings 401",
+      "input": "/settings",
+      "expected": "様式① の有効期限の文言",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-018 ページを開いたときの設定の取得が 401 なら、様式①「ログインの有効期限が切れました…」を出す",
+      "result": "",
+      "note": "P205 E01"
+    },
+    {
+      "id": "TC-UT_P205-019",
+      "target": "loadSettings",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "設定の取得が 404 なら様式を出さず、既定の値でフォームを出す",
+      "precondition": "GET settings 404",
+      "input": "/settings",
+      "expected": "alert・dialog なし、周期は既定の 20",
+      "branches": [
+        "B8-F",
+        "B9-F",
+        "B10-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-019 設定の取得が 404 なら様式を出さず、既定の値でフォームを出す",
+      "result": "",
+      "note": "確認事項 2"
+    },
+    {
+      "id": "TC-UT_P205-020",
+      "target": "loadSettings",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "設定の取得が画面で扱わない 4xx（403）なら、サーバーの message を様式②に出す",
+      "precondition": "GET settings 403",
+      "input": "/settings",
+      "expected": "様式② にサーバーの message",
+      "branches": [
+        "B10-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-020 設定の取得が画面で扱わない 4xx（403）なら、サーバーの message を様式②に出す",
+      "result": "",
+      "note": "設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_P205-021",
+      "target": "saveSettings",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "保存が 409 なら fields を返さず、サーバーの message を様式②に出す",
+      "precondition": "settings 200、PUT 409",
+      "input": "周期 30 で保存",
+      "expected": "様式② にサーバーの message、入力は 30 のまま",
+      "branches": [
+        "B15-F",
+        "B16-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P205-021 保存が 409 なら fields を返さず、サーバーの message を様式②に出す",
+      "result": "",
+      "note": "PUT /settings の 409 は「起きない想定」（world.md 2章）"
+    }
+  ]
+}

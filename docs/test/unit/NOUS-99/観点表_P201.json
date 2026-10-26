@@ -1,0 +1,645 @@
+{
+  "ticket": "NOUS-99",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "P201 管理ログイン（apps/admin/src/pages/LoginPage.tsx）",
+  "targets": [
+    "apps/admin/src/pages/LoginPage.tsx"
+  ],
+  "test_files": [
+    "apps/admin/src/pages/LoginPage.test.tsx（実装時、NOUS-69）",
+    "apps/admin/src/pages/LoginPage.ut.test.tsx（単体テストで追加）"
+  ],
+  "dependencies": [
+    "fetch（mockFetch・vi.stubGlobal）",
+    "SessionProvider（GET /admin/api/session・POST /admin/api/login）",
+    "React Router（?next・?expired）",
+    "Intl.DateTimeFormat（Asia/Tokyo）",
+    "document.title"
+  ],
+  "design_refs": [
+    "画面基本設計書 P201（L01〜L15、E01〜E05、6章のエラーの文言、7章の入力の検証）",
+    "FE 詳細設計 admin_control 4章 submitLogin・validatePassword・togglePasswordVisible、6章"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "validatePassword：空",
+      "location": "LoginPage.tsx:21"
+    },
+    {
+      "id": "B2",
+      "condition": "validatePassword：12 字未満",
+      "location": "LoginPage.tsx:23"
+    },
+    {
+      "id": "B3",
+      "condition": "validatePassword：128 字を超える",
+      "location": "LoginPage.tsx:24"
+    },
+    {
+      "id": "B4",
+      "condition": "formatJstHhMm：日時として読めない",
+      "location": "LoginPage.tsx:30"
+    },
+    {
+      "id": "B5",
+      "condition": "extractLockedUntil：fields.lockedUntil がある",
+      "location": "LoginPage.tsx:41"
+    },
+    {
+      "id": "B6",
+      "condition": "extractLockedUntil：fields が HH:MM の形",
+      "location": "LoginPage.tsx:42"
+    },
+    {
+      "id": "B7",
+      "condition": "extractLockedUntil：fields を JST の HH:MM にできた",
+      "location": "LoginPage.tsx:44"
+    },
+    {
+      "id": "B8",
+      "condition": "extractLockedUntil：message に ISO の日時がある",
+      "location": "LoginPage.tsx:48"
+    },
+    {
+      "id": "B9",
+      "condition": "extractLockedUntil：message の ISO を JST の HH:MM にできた",
+      "location": "LoginPage.tsx:50"
+    },
+    {
+      "id": "B10",
+      "condition": "extractLockedUntil：message に HH:MM がある",
+      "location": "LoginPage.tsx:53"
+    },
+    {
+      "id": "B11",
+      "condition": "resolveNextPath：next がない・/ で始まらない・// で始まる（/ にする）",
+      "location": "LoginPage.tsx:58"
+    },
+    {
+      "id": "B12",
+      "condition": "ログイン済み（status ready）なら next へ移る",
+      "location": "LoginPage.tsx:85"
+    },
+    {
+      "id": "B13",
+      "condition": "入力中に 128 字を超える",
+      "location": "LoginPage.tsx:95"
+    },
+    {
+      "id": "B14",
+      "condition": "submitLogin：検証のエラーがある",
+      "location": "LoginPage.tsx:107"
+    },
+    {
+      "id": "B15",
+      "condition": "submitLogin：ApiError",
+      "location": "LoginPage.tsx:121"
+    },
+    {
+      "id": "B16",
+      "condition": "submitLogin：401",
+      "location": "LoginPage.tsx:122"
+    },
+    {
+      "id": "B17",
+      "condition": "submitLogin：429",
+      "location": "LoginPage.tsx:126"
+    },
+    {
+      "id": "B18",
+      "condition": "submitLogin：409 ADMIN_NOT_SET",
+      "location": "LoginPage.tsx:132"
+    },
+    {
+      "id": "B19",
+      "condition": "submitLogin：400",
+      "location": "LoginPage.tsx:136"
+    },
+    {
+      "id": "B20",
+      "condition": "submitLogin：400 の fields.password がある",
+      "location": "LoginPage.tsx:137"
+    },
+    {
+      "id": "B21",
+      "condition": "submitLogin：500 以上",
+      "location": "LoginPage.tsx:140"
+    },
+    {
+      "id": "B22",
+      "condition": "submitLogin：NetworkError",
+      "location": "LoginPage.tsx:147"
+    },
+    {
+      "id": "B23",
+      "condition": "パスワード未設定（status notSet）の案内を出す",
+      "location": "LoginPage.tsx:159"
+    },
+    {
+      "id": "B24",
+      "condition": "?expired=1 の案内を出す",
+      "location": "LoginPage.tsx:160"
+    },
+    {
+      "id": "B25",
+      "condition": "起動時の通信の失敗の様式①を出す（bootstrapFailed かつ閉じていない）",
+      "location": "LoginPage.tsx:162"
+    },
+    {
+      "id": "B26",
+      "condition": "パスワードを表示する（visible）",
+      "location": "LoginPage.tsx:208"
+    }
+  ],
+  "issues": [
+    "疑い 1：画面基本設計書 P201 の L09「あと N 回失敗すると 15 分ロックされます」（失敗が 3 回以上のとき、N=5−失敗回数）が実装されていない。LoginPage に失敗の回数を数える処理と文言がない。TC-UT_P201-013 は仕様どおり 3 回目の失敗の後にこの文言を期待するので、実施では NG になる見込み。ログインの API は残りの回数を返さないため、画面で数えるか API で返すかの決めも要る",
+    "確認事項 1：submitLogin の送信中の再送の防止（LoginPage.tsx:104 の if (submitting) return）は、送信中は入力欄とボタンを disabled にするため画面の操作では通らない。TC-UT_P201-004 で、送信中に押せないことを確かめている",
+    "確認事項 2：submitLogin で ApiError・NetworkError 以外の例外を様式①にする分岐（LoginPage.tsx:153）は、signIn（adminFetch）がこの2つしか投げないため通らない。B22-F（ApiError でも NetworkError でもない）はこの分岐のことで、理由は同じ"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS69_DEV-01",
+      "target": "validatePassword",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "空・12 字未満・128 字超で所定の文言を返し、12〜128 字で null を返す",
+      "precondition": "なし",
+      "input": "\"\"、a×11・12・128・129",
+      "expected": "空・12 字以上・null・null・128 字以内の文言",
+      "branches": [
+        "B1-T",
+        "B1-F",
+        "B2-T",
+        "B2-F",
+        "B3-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-01 validatePassword は空・12字未満・128字超で所定の文言を返し、12〜128字で null を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-02",
+      "target": "togglePasswordVisible",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "表示の切り替えで input の type が password と text に切り替わる",
+      "precondition": "セッション 401",
+      "input": "切り替えを 2 回押す",
+      "expected": "password → text → password",
+      "branches": [
+        "B26-T",
+        "B26-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-02 パスワードの表示切り替えで input の type が password と text に切り替わる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-03",
+      "target": "submitLogin / ログイン済み",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ログイン成功で ?next= の遷移先へ移動し、ログイン済みなら / へ移動する",
+      "precondition": "セッション 401 → 200",
+      "input": "/login?next=%2Fmetrics でログイン、ログイン済みで /login",
+      "expected": "/metrics、/",
+      "branches": [
+        "B11-F",
+        "B11-T",
+        "B12-T",
+        "B14-F",
+        "B15-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-03 ログイン成功で ?next= の遷移先へ移動し、ログイン済みなら / へ移動する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-04",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "401 LOGIN_FAILED で「パスワードが正しくありません」を表示する",
+      "precondition": "セッション 401",
+      "input": "login → 401",
+      "expected": "様式② パスワードが正しくありません",
+      "branches": [
+        "B15-T",
+        "B16-T",
+        "B12-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-04 ログインの 401 LOGIN_FAILED で「パスワードが正しくありません」を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-05",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "429 LOGIN_LOCKED で解除の時刻を含むロックの文言を表示する",
+      "precondition": "セッション 401",
+      "input": "login → 429（fields.lockedUntil）",
+      "expected": "様式② ログインの試行が続いたため、HH:MM まで受け付けません",
+      "branches": [
+        "B16-F",
+        "B17-T",
+        "B5-T",
+        "B6-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-05 ログインの 429 LOGIN_LOCKED で解除の時刻を含むロックの文言を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-06",
+      "target": "LoginPage",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "パスワード未設定（409 ADMIN_NOT_SET）で設定手順の案内を表示する",
+      "precondition": "セッション 409 ADMIN_NOT_SET",
+      "input": "/login",
+      "expected": "L15 の案内",
+      "branches": [
+        "B23-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-06 パスワード未設定（409 ADMIN_NOT_SET）で設定手順の案内を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS69_DEV-07",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ログイン時の通信失敗・500 エラーは様式①（ErrorModal）で表示する",
+      "precondition": "セッション 401",
+      "input": "login → 500、通信の失敗",
+      "expected": "様式① 管理サーバーに接続できません…",
+      "branches": [
+        "B17-F",
+        "B18-F",
+        "B19-F",
+        "B21-T",
+        "B22-T",
+        "B15-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-69）",
+      "suspect": "",
+      "test_name": "TC-NOUS69_DEV-07 ログイン時の通信失敗・500 エラーは様式①（ErrorModal）で表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P201-001",
+      "target": "validatePassword",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "パスワードの文字数はコードポイントで数え、絵文字 12 字は通り 11 字は 12 字未満にする",
+      "precondition": "なし",
+      "input": "😀×12、😀×11",
+      "expected": "null、「12 字以上で入力してください」",
+      "branches": [
+        "B2-T",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS69_DEV-01（ASCII だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P201-001 パスワードの文字数はコードポイントで数え、絵文字 12 字は通り 11 字は 12 字未満にする",
+      "result": "",
+      "note": "P201 は文字数を「字」で決めている。サロゲートペアは 1 字と読んだ"
+    },
+    {
+      "id": "TC-UT_P201-002",
+      "target": "LoginPage（入力）",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "入力中に 129 字になったらすぐ「128 字以内で入力してください」を出し、128 字に戻すと消す",
+      "precondition": "セッション 401",
+      "input": "129 字を貼り付け、1 字消す",
+      "expected": "129 字で文言、128 字で消える",
+      "branches": [
+        "B13-T",
+        "B13-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし（DEV-01 は関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P201-002 入力中に 129 字になったらすぐ「128 字以内で入力してください」を出し、128 字に戻すと消す",
+      "result": "",
+      "note": "P201 E03・6章 様式④「129 字以上を入力」"
+    },
+    {
+      "id": "TC-UT_P201-003",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "空のまま送信すると「パスワードを入力してください」を出し、ログインの API を呼ばない",
+      "precondition": "セッション 401",
+      "input": "空でログインを押す",
+      "expected": "文言を出し、POST /admin/api/login は 0 回",
+      "branches": [
+        "B14-T",
+        "B1-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS69_DEV-01（関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P201-003 空のまま送信すると「パスワードを入力してください」を出し、ログインの API を呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P201-004",
+      "target": "submitLogin",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "送信中はボタンを「確認中…」にして押せなくし、入力欄も無効にする",
+      "precondition": "セッション 401、login は返らない",
+      "input": "正しい長さで送信",
+      "expected": "ボタン「確認中…」が disabled、入力欄も disabled",
+      "branches": [
+        "B14-F"
+      ],
+      "mock": "fetch を返らない Promise に差し替え、renderApp",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-004 送信中はボタンを「確認中…」にして押せなくし、入力欄も無効にする",
+      "result": "",
+      "note": "P201 L05「送信中は「確認中…」で押せない」"
+    },
+    {
+      "id": "TC-UT_P201-005",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "ログインの 400 VALIDATION_ERROR は fields.password を入力欄の下（様式④）に出す",
+      "precondition": "セッション 401",
+      "input": "login → 400、fields.password",
+      "expected": "入力欄の下に fields.password の文言、aria-invalid=true",
+      "branches": [
+        "B19-T",
+        "B20-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-005 ログインの 400 VALIDATION_ERROR は fields.password を入力欄の下（様式④）に出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P201-006",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "画面で扱わない 4xx（403）は、サーバーの message を様式②に出す",
+      "precondition": "セッション 401",
+      "input": "login → 403 FORBIDDEN_NETWORK",
+      "expected": "様式② にサーバーの message",
+      "branches": [
+        "B18-F",
+        "B19-F",
+        "B21-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-006 画面で扱わない 4xx（403）は、サーバーの message を様式②に出す",
+      "result": "",
+      "note": "設計書に 403 の記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_P201-007",
+      "target": "extractLockedUntil",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "ロックの解除の時刻は fields・message の順に探し、ISO は JST の HH:MM にし、見つからなければ「しばらく」にする",
+      "precondition": "なし",
+      "input": "fields 10:30、fields ISO 01:15Z、message に 11:45、手がかりなし、message に ISO 01:15Z、fields まもなく、message に読めない ISO",
+      "expected": "10:30、10:15、11:45、しばらく、10:15、まもなく、10:00",
+      "branches": [
+        "B5-T",
+        "B5-F",
+        "B6-T",
+        "B6-F",
+        "B7-T",
+        "B7-F",
+        "B4-T",
+        "B4-F",
+        "B8-T",
+        "B8-F",
+        "B9-T",
+        "B9-F",
+        "B10-T",
+        "B10-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS69_DEV-05（fields の ISO だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P201-007 ロックの解除の時刻は fields・message の順に探し、ISO は JST の HH:MM にし、見つからなければ「しばらく」にする",
+      "result": "",
+      "note": "「しばらく」と、読めない値をそのまま出すことは設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_P201-008",
+      "target": "resolveNextPath",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "next が「//」で始まる（別のサイトを指す）ときは、ログインの後に / へ移る",
+      "precondition": "セッション 401、login 200",
+      "input": "/login?next=%2F%2Fevil.example%2Fx でログイン",
+      "expected": "/ へ移る",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS69_DEV-03（正しい next だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P201-008 next が「//」で始まる（別のサイトを指す）ときは、ログインの後に / へ移る",
+      "result": "",
+      "note": "別のサイトへの移動を防ぐ（設計書に記載なし。実装の値）"
+    },
+    {
+      "id": "TC-UT_P201-009",
+      "target": "LoginPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "?expired=1 で来たときは「ログインの有効期限が切れました」を様式②の色で出す",
+      "precondition": "セッション 401",
+      "input": "/login?expired=1",
+      "expected": "alert に「ログインの有効期限が切れました」",
+      "branches": [
+        "B24-T",
+        "B23-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-009 ?expired=1 で来たときは「ログインの有効期限が切れました」を様式②の色で出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P201-010",
+      "target": "LoginPage（E01）",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "起動時のセッションの取得が通信の失敗なら様式①を出し、OK で閉じた後は出し直さない",
+      "precondition": "fetch が常に TypeError",
+      "input": "/login を開き OK を押す",
+      "expected": "様式①が消え、パスワードの入力欄が出ている",
+      "branches": [
+        "B25-T",
+        "B25-F"
+      ],
+      "mock": "fetch を vi.stubGlobal、renderApp",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-010 起動時のセッションの取得が通信の失敗なら様式①を出し、OK で閉じた後は出し直さない",
+      "result": "",
+      "note": "P201 E01 は 500 で「管理サーバーに接続できません」。通信の失敗も同じ扱い"
+    },
+    {
+      "id": "TC-UT_P201-011",
+      "target": "LoginPage",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "ページのタイトルを「管理ログイン - NOUS」にし、サービス名・見出し・注意書きを出す",
+      "precondition": "セッション 401",
+      "input": "/login",
+      "expected": "title、NOUS 管理、管理ログイン、注意書き",
+      "branches": [
+        "B24-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-011 ページのタイトルを「管理ログイン - NOUS」にし、サービス名・見出し・注意書きを出す",
+      "result": "",
+      "note": "P201 L01・L02・L06・L12"
+    },
+    {
+      "id": "TC-UT_P201-012",
+      "target": "submitLogin",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "パスワードの入力欄で Enter を押すと送信する",
+      "precondition": "セッション 401、login 401",
+      "input": "入力して Enter",
+      "expected": "POST /admin/api/login が 1 回",
+      "branches": [
+        "B14-F",
+        "B16-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-012 パスワードの入力欄で Enter を押すと送信する",
+      "result": "",
+      "note": "P201 L14"
+    },
+    {
+      "id": "TC-UT_P201-013",
+      "target": "LoginPage（L09）",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "ログインに 3 回続けて失敗したら「あと 2 回失敗すると 15 分ロックされます」を出す",
+      "precondition": "セッション 401、login は常に 401",
+      "input": "3 回失敗する",
+      "expected": "「あと 2 回失敗すると 15 分ロックされます」",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "実装されていない（疑い 1）",
+      "test_name": "TC-UT_P201-013 ログインに 3 回続けて失敗したら「あと 2 回失敗すると 15 分ロックされます」を出す",
+      "result": "",
+      "note": "P201 L09（失敗が 3 回以上、N=5−失敗回数）"
+    },
+    {
+      "id": "TC-UT_P201-014",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "依存",
+      "viewpoint": "ログインの応答が 200 でも本文が読めなければ様式①（管理サーバーに接続できません）にする",
+      "precondition": "セッション 401、その後 fetch は本文なしの 200",
+      "input": "正しい長さで送信",
+      "expected": "様式① 管理サーバーに接続できません…",
+      "branches": [
+        "B15-F",
+        "B22-T"
+      ],
+      "mock": "fetch を vi.stubGlobal",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-014 ログインの応答が 200 でも本文が読めなければ様式①（管理サーバーに接続できません）にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P201-016",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "ログインの 409 ADMIN_NOT_SET は、パスワード未設定の案内を様式②に出す",
+      "precondition": "セッション 401",
+      "input": "login → 409 ADMIN_NOT_SET",
+      "expected": "様式② に L15 の案内",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS69_DEV-06（GET session の 409 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P201-016 ログインの 409 ADMIN_NOT_SET は、パスワード未設定の案内を様式②に出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P201-015",
+      "target": "submitLogin",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "ログインの 400 で fields がなければ、サーバーの message を入力欄の下に出す",
+      "precondition": "セッション 401",
+      "input": "login → 400、fields なし",
+      "expected": "入力欄の下に「入力の内容を確認してください」",
+      "branches": [
+        "B19-T",
+        "B20-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P201-015 ログインの 400 で fields がなければ、サーバーの message を入力欄の下に出す",
+      "result": "",
+      "note": ""
+    }
+  ]
+}

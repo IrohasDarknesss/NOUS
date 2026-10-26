@@ -1,0 +1,915 @@
+{
+  "ticket": "NOUS-99",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "管理画面の API クライアント・セッション・ルーティング（apps/admin/src の api・session・router・main・App）",
+  "targets": [
+    "apps/admin/src/api/client.ts",
+    "apps/admin/src/api/session.ts",
+    "apps/admin/src/api/world.ts",
+    "apps/admin/src/api/settings.ts",
+    "apps/admin/src/session/SessionProvider.tsx",
+    "apps/admin/src/session/RequireSession.tsx",
+    "apps/admin/src/session/csrfToken.ts",
+    "apps/admin/src/router.tsx",
+    "apps/admin/src/main.tsx",
+    "apps/admin/src/App.tsx"
+  ],
+  "test_files": [
+    "apps/admin/src/api/client.test.ts（実装時、NOUS-50）",
+    "apps/admin/src/router.test.tsx（実装時、NOUS-50）",
+    "apps/admin/src/App.test.tsx（実装時、NOUS-42）",
+    "apps/admin/src/api/api.ut.test.tsx（単体テストで追加）",
+    "apps/admin/src/session/session.ut.test.tsx（単体テストで追加）",
+    "apps/admin/src/router.ut.test.tsx（単体テストで追加）"
+  ],
+  "dependencies": [
+    "fetch（mockFetch・vi.stubGlobal で差し替え）",
+    "TanStack Query（createTestQueryClient）",
+    "React Router（createMemoryRouter・MemoryRouter）",
+    "localStorage・sessionStorage（jsdom）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 admin_control 1章（ルーティング）・3章（状態管理）・4章 adminFetch・getCsrfToken・bootstrapSession・login・logout・useAdminWorld・6章",
+    "画面基本設計書 P201（業務ルール：パスワード・CSRF トークンを保存しない）",
+    "BE 詳細設計 world 2章・admin_auth 2章（API のパス）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "adminFetch：body がある（Content-Type を付ける）",
+      "location": "api/client.ts:56"
+    },
+    {
+      "id": "B2",
+      "condition": "adminFetch：CSRF を付ける（options.csrf ?? method !== 'GET'）",
+      "location": "api/client.ts:57-58"
+    },
+    {
+      "id": "B3",
+      "condition": "adminFetch：手元に CSRF トークンがある",
+      "location": "api/client.ts:60"
+    },
+    {
+      "id": "B4",
+      "condition": "adminFetch：fetch の例外が AbortError",
+      "location": "api/client.ts:72-73"
+    },
+    {
+      "id": "B5",
+      "condition": "adminFetch：status 204",
+      "location": "api/client.ts:77"
+    },
+    {
+      "id": "B6",
+      "condition": "adminFetch：res.ok（2xx）",
+      "location": "api/client.ts:80"
+    },
+    {
+      "id": "B7",
+      "condition": "adminFetch：2xx で本文が読めない（data が undefined）",
+      "location": "api/client.ts:81"
+    },
+    {
+      "id": "B8",
+      "condition": "adminFetch：本文が API のエラーの形（error.code がある）",
+      "location": "api/client.ts:38・85"
+    },
+    {
+      "id": "B9",
+      "condition": "adminFetch：401 かつ ADMIN_UNAUTHORIZED（CSRF トークンを捨てる）",
+      "location": "api/client.ts:88"
+    },
+    {
+      "id": "B10",
+      "condition": "adminFetch：エラーの形でない応答で status >= 500",
+      "location": "api/client.ts:91"
+    },
+    {
+      "id": "B11",
+      "condition": "readJson：本文が空",
+      "location": "api/client.ts:45"
+    },
+    {
+      "id": "B12",
+      "condition": "readJson：JSON.parse の例外",
+      "location": "api/client.ts:48"
+    },
+    {
+      "id": "B13",
+      "condition": "useAdminWorld：取得の失敗（isError）",
+      "location": "api/world.ts:63"
+    },
+    {
+      "id": "B14",
+      "condition": "useAdminWorld：失敗が 3 回目（様式②を出す）",
+      "location": "api/world.ts:65"
+    },
+    {
+      "id": "B15",
+      "condition": "useAdminWorld：成功で失敗の回数を 0 に戻す",
+      "location": "api/world.ts:66"
+    },
+    {
+      "id": "B16",
+      "condition": "bootstrapSession：GET /admin/api/session が成功",
+      "location": "session/SessionProvider.tsx:47-55"
+    },
+    {
+      "id": "B17",
+      "condition": "bootstrapSession：409 ADMIN_NOT_SET",
+      "location": "session/SessionProvider.tsx:58"
+    },
+    {
+      "id": "B18",
+      "condition": "bootstrapSession：401（bootstrapFailed を立てない）",
+      "location": "session/SessionProvider.tsx:62-63"
+    },
+    {
+      "id": "B19",
+      "condition": "signOut：logout の失敗を握りつぶす",
+      "location": "session/SessionProvider.tsx:81"
+    },
+    {
+      "id": "B20",
+      "condition": "useSession：SessionProvider の外",
+      "location": "session/SessionProvider.tsx:102"
+    },
+    {
+      "id": "B21",
+      "condition": "RequireSession：status が loading",
+      "location": "session/RequireSession.tsx:16"
+    },
+    {
+      "id": "B22",
+      "condition": "RequireSession：status が ready でない（/login へ）",
+      "location": "session/RequireSession.tsx:19"
+    },
+    {
+      "id": "B23",
+      "condition": "loginPathFor：移動先が /（next を付けない）",
+      "location": "session/RequireSession.tsx:9"
+    }
+  ],
+  "issues": [
+    "確認事項 1：main.tsx（createRoot と QueryClient の既定の設定）はエントリーポイントで、document の #root に描画するだけのため単体テストの対象にしない。同じ構成は test/renderApp.tsx で組み、router の DEV・UT で通している。App.tsx は雛形（NOUS-42）で、TC-NOUS42_DEV-04 だけを載せた",
+    "確認事項 2：useApiErrorHandler の 401 は、OK のあと /login に移るが ?expired=1 を付けない。P201 の L11「ログインの有効期限が切れました」（?expired=1 で来たとき）は、この経路では出ない。様式①で同じ文言を出しているため不足はないと読むが、L11 をどこから使う想定かの確認"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS50_DEV-01",
+      "target": "adminFetch",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "GET には X-CSRF-Token を付けず、credentials は same-origin",
+      "precondition": "CSRF トークン csrf-abc",
+      "input": "GET /admin/api/world",
+      "expected": "X-CSRF-Token なし、credentials same-origin、本文を返す",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B6-T",
+        "B7-F",
+        "B11-F",
+        "B12-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-01 GET には X-CSRF-Token を付けず、credentials は same-origin",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-02",
+      "target": "adminFetch",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "GET 以外には X-CSRF-Token と Content-Type を付け、本文を JSON にする",
+      "precondition": "CSRF トークン csrf-abc",
+      "input": "POST /admin/api/world/reset、本文 { confirmName }",
+      "expected": "X-CSRF-Token csrf-abc、Content-Type application/json、本文は JSON",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-02 GET 以外には X-CSRF-Token と Content-Type を付け、本文を JSON にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-03",
+      "target": "adminFetch",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "csrf: false なら POST でも X-CSRF-Token を付けない（login）",
+      "precondition": "CSRF トークンあり",
+      "input": "POST /admin/api/login、csrf: false",
+      "expected": "X-CSRF-Token なし",
+      "branches": [
+        "B2-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-03 csrf: false なら POST でも X-CSRF-Token を付けない（login）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-04",
+      "target": "adminFetch",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "204 は undefined を返す",
+      "precondition": "なし",
+      "input": "POST /admin/api/logout → 204",
+      "expected": "undefined",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-04 204 は undefined を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-05",
+      "target": "adminFetch",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "2xx 以外は本文の error から ApiError（status・code・message・fields）にする",
+      "precondition": "なし",
+      "input": "400 VALIDATION_ERROR と fields",
+      "expected": "ApiError の status・code・message・fields",
+      "branches": [
+        "B5-F",
+        "B6-F",
+        "B8-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-05 2xx 以外は本文の error から ApiError（status・code・message・fields）にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-06",
+      "target": "adminFetch",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "401 ADMIN_UNAUTHORIZED では手元の CSRF トークンを捨てる",
+      "precondition": "CSRF トークンあり",
+      "input": "401 ADMIN_UNAUTHORIZED",
+      "expected": "ApiError、getCsrfToken() は null",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-06 401 ADMIN_UNAUTHORIZED では手元の CSRF トークンを捨てる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-07",
+      "target": "adminFetch",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "401 LOGIN_FAILED では CSRF トークンを捨てない",
+      "precondition": "CSRF トークンあり",
+      "input": "401 LOGIN_FAILED",
+      "expected": "ApiError、トークンは残る",
+      "branches": [
+        "B9-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-07 401 LOGIN_FAILED では CSRF トークンを捨てない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-08",
+      "target": "adminFetch",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "通信の失敗は NetworkError、本文が JSON でない 500 は INTERNAL_ERROR の ApiError",
+      "precondition": "なし",
+      "input": "fetch が TypeError、500 で本文が JSON でない",
+      "expected": "NetworkError、ApiError(500, INTERNAL_ERROR)",
+      "branches": [
+        "B4-F",
+        "B12-T",
+        "B8-F",
+        "B10-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-08 通信の失敗は NetworkError、本文が JSON でない 500 は INTERNAL_ERROR の ApiError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-09",
+      "target": "router",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "認証が要る画面は 10 画面・11 ルート（P204 は新規と編集）が登録されている",
+      "precondition": "なし",
+      "input": "protectedRoutes",
+      "expected": "11 ルート",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-09 認証が要る画面は 10 画面・11 ルート（P204 は新規と編集）が登録されている",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-10",
+      "target": "router",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ログイン済みなら各パスで対応する画面を表示する",
+      "precondition": "セッション 200",
+      "input": "/ ・/agents など 11 のパス",
+      "expected": "各画面の ID を表示",
+      "branches": [
+        "B16-T",
+        "B21-F",
+        "B22-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-10 ログイン済みなら %s で %s を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-11",
+      "target": "router",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "/login は認証なしで P201 を表示する",
+      "precondition": "セッション 401",
+      "input": "/login",
+      "expected": "P201 を表示",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-11 /login は認証なしで P201 を表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-12",
+      "target": "router / RequireSession",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "未ログインで認証が要る画面を開くと /login?next=… へ移る",
+      "precondition": "セッション 401",
+      "input": "/settings など",
+      "expected": "/login?next=…",
+      "branches": [
+        "B16-F",
+        "B22-T",
+        "B23-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-12 未ログインで認証が要る画面を開くと /login?next=… へ移る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-13",
+      "target": "router / bootstrapSession",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "パスワード未設定（409 ADMIN_NOT_SET）でも /login へ移る",
+      "precondition": "セッション 409 ADMIN_NOT_SET",
+      "input": "/",
+      "expected": "/login",
+      "branches": [
+        "B17-T",
+        "B22-T",
+        "B23-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-13 パスワード未設定（409 ADMIN_NOT_SET）でも /login へ移る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-14",
+      "target": "router",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "未知のパスは / へ戻す",
+      "precondition": "セッション 200",
+      "input": "/unknown",
+      "expected": "/",
+      "branches": [],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-14 未知のパスは / へ戻す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-15",
+      "target": "AdminHeader / signOut",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ヘッダーに世界の状態と世界内時間、ログアウトで /login へ移る",
+      "precondition": "セッション 200、world 200、logout 204",
+      "input": "ログアウトを押す",
+      "expected": "バッジと世界内時間、/login",
+      "branches": [
+        "B19-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-15 ヘッダーに世界の状態と世界内時間、ログアウトで /login へ移る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-16",
+      "target": "signOut",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "ログアウトの API が失敗しても /login へ移る",
+      "precondition": "logout 500",
+      "input": "ログアウトを押す",
+      "expected": "/login",
+      "branches": [
+        "B19-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-16 ログアウトの API が失敗しても /login へ移る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-17",
+      "target": "AdminSideMenu",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "サイドメニューに 8 項目があり、現在のパスを強調する",
+      "precondition": "セッション 200",
+      "input": "/settings",
+      "expected": "8 項目、実行設定を強調",
+      "branches": [],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-17 サイドメニューに 8 項目があり、現在のパスを強調する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS42_DEV-04",
+      "target": "App",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "testing-library で描画できる（雛形）",
+      "precondition": "なし",
+      "input": "<App />",
+      "expected": "「NOUS admin」を表示",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-42）",
+      "suspect": "",
+      "test_name": "TC-NOUS42_DEV-04 testing-library で描画できる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-001",
+      "target": "adminFetch",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "2xx で本文が空なら NetworkError（応答を読み取れませんでした）にする",
+      "precondition": "なし",
+      "input": "200、本文なし",
+      "expected": "NetworkError、message「応答を読み取れませんでした」",
+      "branches": [
+        "B5-F",
+        "B6-T",
+        "B7-T",
+        "B11-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし（DEV は 2xx で本文があるときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-001 2xx で本文が空なら NetworkError（応答を読み取れませんでした）にする",
+      "result": "",
+      "note": "FE 詳細設計に 2xx で本文がないときの記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_AWEB-002",
+      "target": "adminFetch",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "要求を abort したときは NetworkError にせず AbortError をそのまま投げる",
+      "precondition": "なし",
+      "input": "fetch が DOMException(AbortError) を投げる",
+      "expected": "DOMException（name AbortError）",
+      "branches": [
+        "B4-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS50_DEV-08（AbortError 以外の通信の失敗だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-002 要求を abort したときは NetworkError にせず AbortError をそのまま投げる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-003",
+      "target": "adminFetch",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "4xx で本文が JSON でなければ、code UNKNOWN の ApiError にする",
+      "precondition": "なし",
+      "input": "404、本文「Not Found」",
+      "expected": "ApiError(404, UNKNOWN)",
+      "branches": [
+        "B8-F",
+        "B10-F",
+        "B12-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "一部 TC-NOUS50_DEV-08（500 だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-003 4xx で本文が JSON でなければ、code UNKNOWN の ApiError にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-004",
+      "target": "adminFetch",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "本文の error に code がなければ API のエラーの形とみなさない（400 は UNKNOWN）",
+      "precondition": "なし",
+      "input": "400、本文 { error: \"bad\" }",
+      "expected": "ApiError(400, UNKNOWN)、fields なし",
+      "branches": [
+        "B8-F",
+        "B10-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-004 本文の error に code がなければ API のエラーの形とみなさない（400 は UNKNOWN）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-005",
+      "target": "adminFetch",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "手元に CSRF トークンがなければ、POST でも X-CSRF-Token を付けない",
+      "precondition": "CSRF トークン null",
+      "input": "POST /admin/api/world/pause",
+      "expected": "X-CSRF-Token なし",
+      "branches": [
+        "B2-T",
+        "B3-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "なし（DEV はトークンがあるときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-005 手元に CSRF トークンがなければ、POST でも X-CSRF-Token を付けない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-006",
+      "target": "adminFetch",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "csrf: true なら GET でも X-CSRF-Token を付け、本文がなければ Content-Type を付けない",
+      "precondition": "CSRF トークン csrf-abc",
+      "input": "GET、csrf: true",
+      "expected": "X-CSRF-Token csrf-abc、Content-Type なし",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "一部 TC-NOUS50_DEV-01・03（既定と false だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-006 csrf: true なら GET でも X-CSRF-Token を付け、本文がなければ Content-Type を付けない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-007",
+      "target": "login / logout",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "login は POST /admin/api/login に { password } を X-CSRF-Token なしで送り、logout は X-CSRF-Token を付けて送る",
+      "precondition": "CSRF トークン csrf-abc",
+      "input": "login(\"correct-horse-battery\")、logout()",
+      "expected": "login は本文 { password }・トークンなし、logout は /admin/api/logout にトークンあり",
+      "branches": [
+        "B2-F",
+        "B2-T",
+        "B5-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "一部 TC-NOUS50_DEV-03（adminFetch の引数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-007 login は POST /admin/api/login に { password } を X-CSRF-Token なしで送り、logout は X-CSRF-Token を付けて送る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-008",
+      "target": "start / pause / resume / emergencyStop / reset",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "世界の操作の関数は、対応するパスに X-CSRF-Token を付けて POST する",
+      "precondition": "CSRF トークン csrf-abc",
+      "input": "5 つの関数",
+      "expected": "それぞれ /admin/api/world/start・pause・resume・emergency-stop・reset に POST、トークンあり",
+      "branches": [
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "なし（DEV は画面から一部だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-008 世界の操作の関数は、対応するパスに X-CSRF-Token を付けて POST する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-009",
+      "target": "getAuditLogs",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "getAuditLogs は既定で limit=10、引数を渡せばその件数で GET する",
+      "precondition": "なし",
+      "input": "getAuditLogs()、getAuditLogs(3)",
+      "expected": "?limit=10、?limit=3",
+      "branches": [],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-009 getAuditLogs は既定で limit=10、引数を渡せばその件数で GET する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-010",
+      "target": "getSettings / updateSettings",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "getSettings は GET、updateSettings は本文つきで PUT し X-CSRF-Token を付ける",
+      "precondition": "CSRF トークン csrf-abc",
+      "input": "getSettings()、updateSettings({ cycleMinutes: 30 })",
+      "expected": "GET、PUT と JSON の本文とトークン",
+      "branches": [
+        "B1-T",
+        "B2-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "一部 TC-NOUS69_DEV-22（画面から PUT を呼んだことだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-010 getSettings は GET、updateSettings は本文つきで PUT し X-CSRF-Token を付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-011",
+      "target": "useAdminWorld",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "取得が 2 回続けて失敗しても様式②を出さず、3 回目の失敗で「最新の状態を取得できていません」を出す",
+      "precondition": "GET /admin/api/world が常に 500",
+      "input": "最初の取得と refetchQueries 2 回",
+      "expected": "2 回目の後は banner null、3 回目の後に banner（取得中の最初の描画では回数を変えない）",
+      "branches": [
+        "B13-F",
+        "B15-F",
+        "B13-T",
+        "B14-F",
+        "B14-T"
+      ],
+      "mock": "fetch を vi.stubGlobal、ErrorProvider、QueryClient の refetchQueries で取り直す",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-011 取得が 2 回続けて失敗しても様式②を出さず、3 回目の失敗で「最新の状態を取得できていません」を出す",
+      "result": "",
+      "note": "5 秒ごとの取得は実時間で待たず、refetchQueries で回数だけ進める"
+    },
+    {
+      "id": "TC-UT_AWEB-012",
+      "target": "useAdminWorld",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "途中で 1 回成功すれば失敗の回数を数え直し、その後 2 回失敗しても様式②を出さない",
+      "precondition": "失敗・失敗・成功・失敗・失敗の順に応答",
+      "input": "最初の取得と refetchQueries 4 回",
+      "expected": "banner は null のまま",
+      "branches": [
+        "B13-T",
+        "B13-F",
+        "B15-T",
+        "B14-F"
+      ],
+      "mock": "fetch を vi.stubGlobal、ErrorProvider、refetchQueries",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-012 途中で 1 回成功すれば失敗の回数を数え直し、その後 2 回失敗しても様式②を出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-013",
+      "target": "csrfToken",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "CSRF トークンはメモリだけに置き、localStorage・sessionStorage に書かない",
+      "precondition": "なし",
+      "input": "setCsrfToken(\"csrf-memory-only\")",
+      "expected": "getCsrfToken は同じ値、localStorage・sessionStorage にその値がない",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-013 CSRF トークンはメモリだけに置き、localStorage・sessionStorage に書かない",
+      "result": "",
+      "note": "P201 の業務ルール・FE 詳細設計 3章（保存しない）"
+    },
+    {
+      "id": "TC-UT_AWEB-014",
+      "target": "SessionProvider（bootstrapSession）",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "起動時のセッションの取得が 401 なら未ログインだけ、通信の失敗なら bootstrapFailed も立てる",
+      "precondition": "なし",
+      "input": "GET /admin/api/session → 401、または fetch が TypeError",
+      "expected": "どちらも status unauthenticated・トークン null。bootstrapFailed は 401 で false、通信の失敗で true",
+      "branches": [
+        "B16-F",
+        "B17-F",
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（通信の失敗は vi.stubGlobal）、MemoryRouter",
+      "dev_ref": "一部 TC-NOUS50_DEV-11・12（401 の画面の遷移だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-014 起動時のセッションの取得が 401 なら未ログインだけ、通信の失敗なら bootstrapFailed も立てる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-015",
+      "target": "SessionProvider（bootstrapSession）",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "起動時のセッションの取得が 200 なら ready にし、表示名と CSRF トークンを置く",
+      "precondition": "なし",
+      "input": "GET /admin/api/session → 200",
+      "expected": "status ready、表示名 Kaine Yamashiro、getCsrfToken は csrf-token-1",
+      "branches": [
+        "B16-T",
+        "B20-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、MemoryRouter",
+      "dev_ref": "一部 TC-NOUS50_DEV-10（画面が出ることだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-015 起動時のセッションの取得が 200 なら ready にし、表示名と CSRF トークンを置く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-016",
+      "target": "SessionProvider（signIn / signOut）",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "signIn はログインの応答の CSRF トークンを置いて ready にし、signOut はトークンとクエリのキャッシュを捨てて /login へ移る",
+      "precondition": "セッション 401、login 200（csrf-after-login）、logout 204。キャッシュに ['admin','world']",
+      "input": "signIn → signOut",
+      "expected": "signIn 後のトークン csrf-after-login・ready、signOut 後に /login・トークン null・キャッシュなし",
+      "branches": [
+        "B19-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、MemoryRouter と Routes",
+      "dev_ref": "一部 TC-NOUS50_DEV-15（/login へ移ることだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-016 signIn はログインの応答の CSRF トークンを置いて ready にし、signOut はトークンとクエリのキャッシュを捨てて /login へ移る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-017",
+      "target": "useSession",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "useSession を SessionProvider の外で使うと例外にする",
+      "precondition": "なし",
+      "input": "renderHook(useSession)",
+      "expected": "Error「useSession は SessionProvider の中で使ってください」",
+      "branches": [
+        "B20-T"
+      ],
+      "mock": "console.error を抑える",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-017 useSession を SessionProvider の外で使うと例外にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-018",
+      "target": "RequireSession",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "セッションの確認中は「読み込み中…」を出し、子の画面を出さない",
+      "precondition": "GET /admin/api/session が返らない",
+      "input": "RequireSession の子に PROTECTED",
+      "expected": "「読み込み中…」、PROTECTED は出ない",
+      "branches": [
+        "B21-T"
+      ],
+      "mock": "fetch を返らない Promise に差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-018 セッションの確認中は「読み込み中…」を出し、子の画面を出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-019",
+      "target": "loginPathFor",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "loginPathFor は / なら next を付けず、それ以外はパスと検索文字列を next に入れる",
+      "precondition": "なし",
+      "input": "(\"/\", \"\")、(\"/settings\", \"?tab=1\")",
+      "expected": "/login、/login?next=%2Fsettings%3Ftab%3D1",
+      "branches": [
+        "B23-T",
+        "B23-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS50_DEV-12（検索文字列なし）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-019 loginPathFor は / なら next を付けず、それ以外はパスと検索文字列を next に入れる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-020",
+      "target": "router / RequireSession",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "未ログインで検索文字列つきの画面を開くと、検索文字列も含めて next に入れて /login へ移る",
+      "precondition": "セッション 401",
+      "input": "/generations?status=failed",
+      "expected": "/login?next=%2Fgenerations%3Fstatus%3Dfailed、P201 を表示",
+      "branches": [
+        "B22-T",
+        "B23-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS50_DEV-12（検索文字列なし）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-020 未ログインで検索文字列つきの画面を開くと、検索文字列も含めて next に入れて /login へ移る",
+      "result": "",
+      "note": ""
+    }
+  ]
+}

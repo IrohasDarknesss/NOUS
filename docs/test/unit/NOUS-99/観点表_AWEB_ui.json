@@ -1,0 +1,859 @@
+{
+  "ticket": "NOUS-99",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "管理画面の枠と共通部品（apps/admin/src の layout・shared）",
+  "targets": [
+    "apps/admin/src/layout/AdminLayout.tsx",
+    "apps/admin/src/layout/AdminHeader.tsx",
+    "apps/admin/src/layout/AdminSideMenu.tsx",
+    "apps/admin/src/layout/WorldStateBadge.tsx",
+    "apps/admin/src/layout/worldTime.ts",
+    "apps/admin/src/shared/useApiErrorHandler.ts",
+    "apps/admin/src/shared/ErrorContext.tsx",
+    "apps/admin/src/shared/ErrorModal.tsx",
+    "apps/admin/src/shared/ErrorBanner.tsx",
+    "apps/admin/src/shared/FieldError.tsx",
+    "apps/admin/src/shared/ConfirmDialog.tsx",
+    "apps/admin/src/shared/Toast.tsx",
+    "apps/admin/src/shared/Modal.tsx",
+    "apps/admin/src/shared/NumberField.tsx",
+    "apps/admin/src/shared/TextField.tsx",
+    "apps/admin/src/shared/SelectField.tsx",
+    "apps/admin/src/shared/DataTable.tsx"
+  ],
+  "test_files": [
+    "apps/admin/src/layout/layout.test.tsx（実装時、NOUS-50）",
+    "apps/admin/src/shared/shared.test.tsx（実装時、NOUS-50）",
+    "apps/admin/src/layout/layout.ut.test.tsx（単体テストで追加）",
+    "apps/admin/src/shared/shared.ut.test.tsx（単体テストで追加）"
+  ],
+  "dependencies": [
+    "fetch（mockFetch）",
+    "TanStack Query",
+    "React Router",
+    "setTimeout（Toast。vi.useFakeTimers）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 admin_control 2章（コンポーネント）・3章・4章 useApiErrorHandler・formatStopReason・6章（エラーの様式）",
+    "画面基本設計書 P202 A01〜A04（サイドメニュー・バッジ・世界内時間・ログアウト）、基本設計書（概要）3章（世界内時間の表し方）"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "formatWorldTime：負の秒を 0 にする（Math.max）",
+      "location": "layout/worldTime.ts:3"
+    },
+    {
+      "id": "B2",
+      "condition": "formatStopReason：stopReason がない",
+      "location": "layout/WorldStateBadge.tsx:23"
+    },
+    {
+      "id": "B3",
+      "condition": "formatStopReason：知らない理由（?? stopReason）",
+      "location": "layout/WorldStateBadge.tsx:24"
+    },
+    {
+      "id": "B4",
+      "condition": "WorldStateBadge：上限停止なら理由を添える",
+      "location": "layout/WorldStateBadge.tsx:33"
+    },
+    {
+      "id": "B5",
+      "condition": "AdminHeader：世界の状態を取得済み",
+      "location": "layout/AdminHeader.tsx:29"
+    },
+    {
+      "id": "B6",
+      "condition": "AdminLayout：閉じた様式①の移動先が /login（セッションを捨てる）",
+      "location": "layout/AdminLayout.tsx:19"
+    },
+    {
+      "id": "B7",
+      "condition": "AdminSideMenu：現在の画面（isActive）",
+      "location": "layout/AdminSideMenu.tsx:31-34"
+    },
+    {
+      "id": "B8",
+      "condition": "useApiErrorHandler：ApiError",
+      "location": "shared/useApiErrorHandler.ts:33"
+    },
+    {
+      "id": "B9",
+      "condition": "useApiErrorHandler：401",
+      "location": "shared/useApiErrorHandler.ts:34"
+    },
+    {
+      "id": "B10",
+      "condition": "useApiErrorHandler：403 かつ CSRF_INVALID",
+      "location": "shared/useApiErrorHandler.ts:38"
+    },
+    {
+      "id": "B11",
+      "condition": "useApiErrorHandler：409",
+      "location": "shared/useApiErrorHandler.ts:42"
+    },
+    {
+      "id": "B12",
+      "condition": "useApiErrorHandler：conflictMessage が関数",
+      "location": "shared/useApiErrorHandler.ts:44-45"
+    },
+    {
+      "id": "B13",
+      "condition": "useApiErrorHandler：conflictMessage がない（?? error.message）",
+      "location": "shared/useApiErrorHandler.ts:46"
+    },
+    {
+      "id": "B14",
+      "condition": "useApiErrorHandler：400",
+      "location": "shared/useApiErrorHandler.ts:51"
+    },
+    {
+      "id": "B15",
+      "condition": "useApiErrorHandler：fields に項目がある",
+      "location": "shared/useApiErrorHandler.ts:52-53"
+    },
+    {
+      "id": "B16",
+      "condition": "useApiErrorHandler：500 以上",
+      "location": "shared/useApiErrorHandler.ts:56"
+    },
+    {
+      "id": "B17",
+      "condition": "useApiErrorHandler：NetworkError",
+      "location": "shared/useApiErrorHandler.ts:64"
+    },
+    {
+      "id": "B18",
+      "condition": "useApiErrorHandler：AbortError",
+      "location": "shared/useApiErrorHandler.ts:68"
+    },
+    {
+      "id": "B19",
+      "condition": "ErrorModal：message がない（出さない）",
+      "location": "shared/ErrorModal.tsx:13"
+    },
+    {
+      "id": "B20",
+      "condition": "ErrorModal：redirectTo がある",
+      "location": "shared/ErrorModal.tsx:17"
+    },
+    {
+      "id": "B21",
+      "condition": "ErrorBanner：message がない（出さない）",
+      "location": "shared/ErrorBanner.tsx:10"
+    },
+    {
+      "id": "B22",
+      "condition": "ErrorBanner：onClose がある（閉じるボタン）",
+      "location": "shared/ErrorBanner.tsx:24"
+    },
+    {
+      "id": "B23",
+      "condition": "FieldError：message がない（出さない）",
+      "location": "shared/FieldError.tsx:10"
+    },
+    {
+      "id": "B24",
+      "condition": "TextField：hideCount",
+      "location": "shared/TextField.tsx:56"
+    },
+    {
+      "id": "B25",
+      "condition": "TextField：文字数が maxLength を超える",
+      "location": "shared/TextField.tsx:57"
+    },
+    {
+      "id": "B26",
+      "condition": "TextField：multiline",
+      "location": "shared/TextField.tsx:62"
+    },
+    {
+      "id": "B27",
+      "condition": "DataTable：行が 0 件",
+      "location": "shared/DataTable.tsx:46"
+    },
+    {
+      "id": "B28",
+      "condition": "DataTable：onRowClick がある",
+      "location": "shared/DataTable.tsx:56-57"
+    },
+    {
+      "id": "B29",
+      "condition": "NumberField・TextField：error がある（aria-invalid）",
+      "location": "shared/NumberField.tsx:36、shared/TextField.tsx:44"
+    }
+  ],
+  "issues": [
+    "確認事項 1：ConfirmDialog の送信中の再送の防止（ConfirmDialog.tsx:27 の if (submitting) return）は、送信中はボタンを disabled にするため画面の操作では通らない。TC-NOUS50_DEV-22 で、送信中にボタンが押せないことだけを確かめている。分岐の一覧からは外した",
+    "確認事項 2：色・余白・danger のボタンの色などの見た目は、README 6.5 のとおり単体テストの対象にしない（ST の UI レビューで見る）"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS50_DEV-18",
+      "target": "formatWorldTime",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "世界内時間を「第 N 日 HH:MM」にする",
+      "precondition": "なし",
+      "input": "0、86,399、86,400、7,260",
+      "expected": "第 1 日 00:00、第 1 日 23:59、第 2 日 00:00、第 1 日 02:01",
+      "branches": [
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-18 世界内時間を「第 N 日 HH:MM」にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-19",
+      "target": "formatStopReason",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "停止理由を日本語にする",
+      "precondition": "なし",
+      "input": "5 つの理由と null",
+      "expected": "各日本語、null は空",
+      "branches": [
+        "B2-T",
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-19 停止理由を日本語にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-20",
+      "target": "WorldStateBadge",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "状態の色と、上限停止のときは理由を出す",
+      "precondition": "なし",
+      "input": "limit_stopped・runs_limit",
+      "expected": "「上限停止（生成の回数の上限）」、背景 #EA580C",
+      "branches": [
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-20 WorldStateBadge は状態の色と、上限停止のときは理由を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-21",
+      "target": "ErrorBanner / FieldError",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "message がなければ何も出さない",
+      "precondition": "なし",
+      "input": "ErrorBanner null、FieldError 引数なし、その後 ErrorBanner に文言",
+      "expected": "何も出さない、文言の alert",
+      "branches": [
+        "B21-T",
+        "B21-F",
+        "B22-F",
+        "B23-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-21 ErrorBanner・FieldError は message がなければ何も出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-22",
+      "target": "ConfirmDialog",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "確定とキャンセルを呼び分け、送信中は押せない",
+      "precondition": "なし",
+      "input": "確定・キャンセル",
+      "expected": "onConfirm・onCancel を呼び分け、送信中は disabled",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-22 ConfirmDialog は確定とキャンセルを呼び分け、送信中は押せない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-23",
+      "target": "ToastProvider",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "トーストは 4 秒で消える",
+      "precondition": "vi.useFakeTimers",
+      "input": "showToast",
+      "expected": "4 秒後に消える",
+      "branches": [],
+      "mock": "vi.useFakeTimers",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-23 トーストは 4 秒で消える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-24",
+      "target": "DataTable",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "0 件で emptyMessage、行を押すと onRowClick",
+      "precondition": "なし",
+      "input": "rows 0 件と 1 件",
+      "expected": "emptyMessage、onRowClick が呼ばれる",
+      "branches": [
+        "B27-T",
+        "B27-F",
+        "B28-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-24 DataTable は 0 件で emptyMessage、行を押すと onRowClick",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-25",
+      "target": "TextField",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "文字数を出し、error を入力欄の下に出す",
+      "precondition": "なし",
+      "input": "value・maxLength・error",
+      "expected": "「n/max」と error の文言",
+      "branches": [
+        "B24-F",
+        "B25-F",
+        "B26-F",
+        "B29-T",
+        "B23-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-25 TextField は文字数を出し、error を入力欄の下に出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-26",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "401 は様式①（ログインの有効期限）で、OK の後に /login",
+      "precondition": "SessionProvider・ErrorProvider",
+      "input": "ApiError(401)",
+      "expected": "modal { 有効期限の文言, redirectTo /login }",
+      "branches": [
+        "B8-T",
+        "B9-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-26 401 は様式①（ログインの有効期限）で、OK の後に /login",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-27",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "409 は様式②に画面の文言を出し、指定のクエリを再取得する",
+      "precondition": "同上",
+      "input": "ApiError(409)、conflictMessage は文字列、invalidateKeys",
+      "expected": "banner に画面の文言、invalidateQueries",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B11-T",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-27 409 は様式②に画面の文言を出し、指定のクエリを再取得する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-28",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "400 は fields を返し、fields がなければ _form に message",
+      "precondition": "同上",
+      "input": "ApiError(400) fields あり・なし",
+      "expected": "fields、{ _form: message }",
+      "branches": [
+        "B11-F",
+        "B14-T",
+        "B15-T",
+        "B15-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-28 400 は fields を返し、fields がなければ _form に message",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-29",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "500 と通信の失敗は様式①",
+      "precondition": "同上",
+      "input": "ApiError(500)、NetworkError",
+      "expected": "modal 操作に失敗しました…",
+      "branches": [
+        "B14-F",
+        "B16-T",
+        "B8-F",
+        "B17-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-29 500 と通信の失敗は様式①",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS50_DEV-30",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "403 CSRF_INVALID はセッションを取り直してから様式②「操作をやり直してください」",
+      "precondition": "同上",
+      "input": "ApiError(403, CSRF_INVALID)",
+      "expected": "GET session の後に banner",
+      "branches": [
+        "B10-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "実装時のテスト（NOUS-50）",
+      "suspect": "",
+      "test_name": "TC-NOUS50_DEV-30 403 CSRF_INVALID はセッションを取り直してから様式②「操作をやり直してください」",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-021",
+      "target": "formatWorldTime",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "世界内時間は負なら 0 として扱い、秒の端数と 1 分未満は切り捨てる",
+      "precondition": "なし",
+      "input": "-5、59.9、3,599、3,600",
+      "expected": "第 1 日 00:00、第 1 日 00:00、第 1 日 00:59、第 1 日 01:00",
+      "branches": [
+        "B1-T",
+        "B1-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS50_DEV-18（0 以上の整数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-021 世界内時間は負なら 0 として扱い、秒の端数と 1 分未満は切り捨てる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-022",
+      "target": "formatStopReason",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "知らない理由をそのまま返し、undefined は空にする",
+      "precondition": "なし",
+      "input": "\"maintenance\"、undefined",
+      "expected": "\"maintenance\"、\"\"",
+      "branches": [
+        "B3-T",
+        "B2-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS50_DEV-19（既知の 5 つと null）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-022 formatStopReason は知らない理由をそのまま返し、undefined は空にする",
+      "result": "",
+      "note": "知らない理由の扱いは設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_AWEB-023",
+      "target": "WorldStateBadge",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "上限停止以外では停止理由を添えない",
+      "precondition": "なし",
+      "input": "paused・manual_pause、emergency_stopped・emergency",
+      "expected": "「一時停止」「緊急停止」だけで（）を付けない",
+      "branches": [
+        "B4-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS50_DEV-20（上限停止だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-023 WorldStateBadge は上限停止以外では停止理由を添えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-024",
+      "target": "AdminSideMenu",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "/agents で「エージェント」だけを現在の画面にし、「実行制御」（/）は強調しない",
+      "precondition": "セッション 200、world 200",
+      "input": "/agents を開く",
+      "expected": "/agents のリンクに aria-current=page、/ のリンクには付けない",
+      "branches": [
+        "B7-T",
+        "B7-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS50_DEV-17（/settings で、/ の end を見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-024 サイドメニューは /agents で「エージェント」だけを現在の画面にし、「実行制御」（/）は強調しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-025",
+      "target": "AdminHeader",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "世界の状態の取得中に「状態を取得しています…」を出し、ログインした管理者の表示名を出す",
+      "precondition": "セッション 200、GET world は返らない",
+      "input": "/ を開く",
+      "expected": "「状態を取得しています…」と「Kaine Yamashiro」",
+      "branches": [
+        "B5-F"
+      ],
+      "mock": "fetch を vi.stubGlobal（world は返らない Promise）、renderApp",
+      "dev_ref": "なし（DEV-15 は取得済みのときだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-025 ヘッダーは世界の状態の取得中に「状態を取得しています…」を出し、ログインした管理者の表示名を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-026",
+      "target": "AdminLayout / useApiErrorHandler",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "画面の API が 401 なら様式①を出し、OK でセッションを捨てて /login の画面に移る",
+      "precondition": "セッション 200、GET settings 401",
+      "input": "/settings を開き、OK を押す",
+      "expected": "有効期限の文言のモーダル、OK の後に /login で P201 を表示",
+      "branches": [
+        "B5-T",
+        "B6-T",
+        "B8-T",
+        "B9-T",
+        "B19-F",
+        "B20-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "一部 TC-NOUS50_DEV-26（modal の状態だけで、移動とセッションの破棄は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-026 画面の API が 401 なら様式①を出し、OK でセッションを捨てて /login の画面に移る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-027",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "409 で conflictMessage が関数ならエラーから文言を作り、指定がなければサーバーの message を様式②に出す",
+      "precondition": "SessionProvider・ErrorProvider",
+      "input": "ApiError(409, NO_AGENTS) と関数、ApiError(409, STATE_CONFLICT) と ctx なし",
+      "expected": "「画面:NO_AGENTS」、その後「server-conflict」、invalidateQueries は呼ばない",
+      "branches": [
+        "B11-T",
+        "B12-T",
+        "B13-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "一部 TC-NOUS50_DEV-27（文字列の文言だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-027 409 で conflictMessage が関数ならエラーから文言を作り、指定がなければサーバーの message を様式②に出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-028",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "画面で扱わない 4xx（404・429）はサーバーの message を様式②に出す",
+      "precondition": "同上",
+      "input": "ApiError(404)、ApiError(429)",
+      "expected": "banner に server-404・server-429、modal は出さない",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B11-F",
+        "B14-F",
+        "B16-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-028 画面で扱わない 4xx（404・429）はサーバーの message を様式②に出す",
+      "result": "",
+      "note": "設計書 4章に 404・429 の記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_AWEB-029",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "AbortError は何も出さず、ApiError・NetworkError 以外の例外は様式①にする",
+      "precondition": "同上",
+      "input": "DOMException(AbortError)、Error",
+      "expected": "AbortError は banner・modal とも null、Error は modal 操作に失敗しました…",
+      "branches": [
+        "B8-F",
+        "B17-F",
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-029 AbortError は何も出さず、ApiError・NetworkError 以外の例外は様式①にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-030",
+      "target": "useApiErrorHandler",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "400 で fields が空のオブジェクトなら、_form に message を入れて返す",
+      "precondition": "同上",
+      "input": "ApiError(400, VALIDATION_ERROR, \"入力の内容を確認してください\", {})",
+      "expected": "{ _form: \"入力の内容を確認してください\" }",
+      "branches": [
+        "B14-T",
+        "B15-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え",
+      "dev_ref": "一部 TC-NOUS50_DEV-28（fields が undefined のとき）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-030 400 で fields が空のオブジェクトなら、_form に message を入れて返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-031",
+      "target": "useErrorState",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "ErrorProvider の外では、様式の表示の関数を呼んでも何もせず例外にしない",
+      "precondition": "なし（Provider の外）",
+      "input": "showBanner・showModal",
+      "expected": "例外にならない、banner は null",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-031 ErrorProvider の外では、様式の表示の関数を呼んでも何もせず例外にしない",
+      "result": "",
+      "note": "LoginPage は AdminLayout の外で使うため"
+    },
+    {
+      "id": "TC-UT_AWEB-032",
+      "target": "ErrorModal",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "redirectTo がなければ OK で閉じるだけで移動しない",
+      "precondition": "/settings",
+      "input": "message あり、redirectTo なし、OK",
+      "expected": "onClose 1 回、/login に移らない",
+      "branches": [
+        "B19-F",
+        "B20-F"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "一部 TC-NOUS50_DEV-26（redirectTo ありの状態だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-032 ErrorModal は redirectTo がなければ OK で閉じるだけで移動しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-033",
+      "target": "ErrorBanner",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "onClose があれば閉じるボタンを出して呼び、なければボタンを出さない",
+      "precondition": "なし",
+      "input": "onClose あり → なし",
+      "expected": "1 回呼ぶ、なしではボタンなし",
+      "branches": [
+        "B22-T",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS50_DEV-21（onClose なしだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-033 ErrorBanner は onClose があれば閉じるボタンを出して呼び、なければボタンを出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-034",
+      "target": "ToastProvider",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "トーストを 2 秒ずらして 2 つ出すと、それぞれ 4 秒で別々に消える",
+      "precondition": "vi.useFakeTimers",
+      "input": "0 秒に 1つ目、2 秒に 2つ目、4 秒と 6 秒で確かめる",
+      "expected": "4 秒で 2つ目だけ残り、6 秒で 0 件",
+      "branches": [],
+      "mock": "vi.useFakeTimers",
+      "dev_ref": "一部 TC-NOUS50_DEV-23（1 つだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-034 トーストを 2 秒ずらして 2 つ出すと、それぞれ 4 秒で別々に消える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-035",
+      "target": "NumberField",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "範囲と単位を出し、入力値を文字列のまま返し、error のときは aria-invalid を付ける",
+      "precondition": "なし",
+      "input": "label 周期（分）、15〜120、unit 分、error あり、\"7\" を入力",
+      "expected": "「15〜120」「分」、onChange(\"7\")、aria-invalid=true",
+      "branches": [
+        "B29-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-035 NumberField は範囲と単位を出し、入力値を文字列のまま返し、error のときは aria-invalid を付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-036",
+      "target": "TextField",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "文字数をコードポイントで数え、上限を超えた数も出し、hideCount なら数を出さない",
+      "precondition": "なし",
+      "input": "value \"😀a\"、maxLength 1、hideCount なし → あり",
+      "expected": "「2/1」、hideCount では出さない",
+      "branches": [
+        "B24-T",
+        "B24-F",
+        "B25-T",
+        "B29-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS50_DEV-25（上限の中の ASCII だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-036 TextField は文字数をコードポイントで数え、上限を超えた数も出し、hideCount なら数を出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-037",
+      "target": "SelectField",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "選択肢を出し、選んだ値を onChange に渡す",
+      "precondition": "なし",
+      "input": "options A・B、b を選ぶ",
+      "expected": "option は [A, B]、onChange(\"b\")",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-037 SelectField は選択肢を出し、選んだ値を onChange に渡す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-038",
+      "target": "AdminLayout",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "移動先のない様式①（500）は、OK で閉じてもセッションを捨てず、同じ画面に残る",
+      "precondition": "セッション 200、GET settings 500",
+      "input": "/settings を開き、OK を押す",
+      "expected": "モーダルが消え、/settings のまま、ログアウトのボタン（ヘッダー）がある",
+      "branches": [
+        "B6-F",
+        "B20-F",
+        "B19-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え、renderApp（createMemoryRouter と QueryClient）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-038 移動先のない様式①（500）は、OK で閉じてもセッションを捨てず、同じ画面に残る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-039",
+      "target": "TextField",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "multiline なら textarea を rows の行数で出す",
+      "precondition": "なし",
+      "input": "multiline、rows 5",
+      "expected": "TEXTAREA、rows=5",
+      "branches": [
+        "B26-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-039 TextField は multiline なら textarea を rows の行数で出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_AWEB-040",
+      "target": "DataTable",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "onRowClick がなければ行を押せる見た目にせず、押しても何も起きない",
+      "precondition": "なし",
+      "input": "rows 1 件、onRowClick なし、行を押す",
+      "expected": "行の cursor は空、例外なし",
+      "branches": [
+        "B28-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS50_DEV-24（onRowClick ありだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_AWEB-040 DataTable は onRowClick がなければ行を押せる見た目にせず、押しても何も起きない",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
