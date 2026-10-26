@@ -1,0 +1,689 @@
+{
+  "ticket": "NOUS-106",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-26",
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "title": "観察画面の共通の枠と部品（layout/*、components/*、router）",
+  "targets": [
+    "apps/observer/src/layout/ObserverLayout.tsx",
+    "apps/observer/src/layout/ObserverHeader.tsx",
+    "apps/observer/src/layout/WorldStatusFooter.tsx",
+    "apps/observer/src/layout/ErrorBanner.tsx",
+    "apps/observer/src/layout/AiNoticeBand.tsx",
+    "apps/observer/src/components/*.tsx",
+    "apps/observer/src/router.tsx"
+  ],
+  "dependencies": [
+    "TanStack Query",
+    "react-router-dom（MemoryRouter）",
+    "fetch（/api/world）",
+    "Date（vi.useFakeTimers）",
+    "共通の準備は apps/observer/src/test/observerUt.tsx（このチケットで新しく作った、単体テストだけが使う補助）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 observer 1章（ルーティング）・2章（コンポーネント）・4章 reportApiError・openPost・6章（UI エラーフィードバック）",
+    "画面 P101 H01〜H17・様式②③"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "useBanner：ObserverLayout の外",
+      "location": "ObserverLayout.tsx:29"
+    },
+    {
+      "id": "B2",
+      "condition": "reportApiError：NotInvitedError",
+      "location": "ObserverLayout.tsx:52"
+    },
+    {
+      "id": "B3",
+      "condition": "reportApiError：ApiError の 404",
+      "location": "ObserverLayout.tsx:53"
+    },
+    {
+      "id": "B4",
+      "condition": "reportApiError：notFound の文言がある",
+      "location": "ObserverLayout.tsx:54"
+    },
+    {
+      "id": "B5",
+      "condition": "ObserverLayout：notFoundTitle がある（全画面表示）",
+      "location": "ObserverLayout.tsx:87"
+    },
+    {
+      "id": "B6",
+      "condition": "ObserverLayout・ObserverHeader：minimal（リンクとフッターを出さない）",
+      "location": "ObserverLayout.tsx:89、ObserverHeader.tsx:23・30"
+    },
+    {
+      "id": "B7",
+      "condition": "WorldStatusFooter：isError",
+      "location": "WorldStatusFooter.tsx:8"
+    },
+    {
+      "id": "B8",
+      "condition": "WorldStatusFooter：world がある",
+      "location": "WorldStatusFooter.tsx:10"
+    },
+    {
+      "id": "B9",
+      "condition": "WorldStatusFooter：state が running",
+      "location": "WorldStatusFooter.tsx:11"
+    },
+    {
+      "id": "B10",
+      "condition": "WorldStatusFooter：lastUpdated がある",
+      "location": "WorldStatusFooter.tsx:29"
+    },
+    {
+      "id": "B11",
+      "condition": "ErrorBanner：message が null",
+      "location": "ErrorBanner.tsx:5"
+    },
+    {
+      "id": "B12",
+      "condition": "AgentName：linked",
+      "location": "AgentName.tsx:18"
+    },
+    {
+      "id": "B13",
+      "condition": "AgentName：state が stopped",
+      "location": "AgentName.tsx:31"
+    },
+    {
+      "id": "B14",
+      "condition": "PostCard：カード自身で Enter かスペース",
+      "location": "PostCard.tsx:17"
+    },
+    {
+      "id": "B15",
+      "condition": "PostCard：replyTo がある",
+      "location": "PostCard.tsx:41"
+    },
+    {
+      "id": "B16",
+      "condition": "LoadMoreButton：loading",
+      "location": "LoadMoreButton.tsx:14・25"
+    },
+    {
+      "id": "B17",
+      "condition": "FullPageError：linkToTimeline",
+      "location": "FullPageError.tsx:14"
+    }
+  ],
+  "issues": [
+    "疑い 3：403（私設アドレス以外）は設計書 6章で様式③「このネットワークからは閲覧できません」の全画面表示だが、reportApiError は 404 しか全画面にせず、403 は様式②の赤色バーになる。TC-UT_OWEB-048 は設計どおりの期待結果で書いた（実施で NG の見込み）",
+    "分岐 B4 の真（notFound の文言あり）は、各画面の 404 のケース（TC-NOUS67_DEV-12、TC-NOUS68_DEV-09・16、TC-UT_P104-008）で通る。このシートの UT では notFound なしの既定の文言を確かめる",
+    "確認事項 1：main.tsx の QueryClient の設定（401 は再試行しない、それ以外は 1 回だけ再試行、refetchIntervalInBackground false）は export されておらず、単体テストでは通せない。結合テストで見る",
+    "テストの書き方：ObserverLayout は描画の直後にパスの変化としてバナーを消すため、子が描画の effect で reportApiError を呼ぶと消される。UT では「報告する」を押して渡している（実際の画面は取得の後に呼ぶので影響はない）",
+    "実施の手がかり：TC-NOUS49_DEV-19 は同じファイルの前のテストの描画が残る（cleanup を呼んでいない。vitest の globals が無効なので Testing Library の自動の cleanup が効かない）ため、「ミカ」が複数見つかって落ちる見込み。テストの書き方の問題として切り分ける"
+  ],
+  "test_files": [
+    "apps/observer/src/layout/layout.ut.test.tsx",
+    "apps/observer/src/components/components.test.tsx",
+    "apps/observer/src/components/components.ut.test.tsx",
+    "apps/observer/src/router.test.tsx"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS49_DEV-17",
+      "target": "AgentName",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "AI バッジとハンドル、停止中のバッジ",
+      "precondition": "なし",
+      "input": "active・stopped",
+      "expected": "AI・@handle・停止中",
+      "branches": [
+        "B12-T",
+        "B13-T",
+        "B13-F"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-17 AgentName は AI バッジとハンドルを出し、停止中なら停止中のバッジも出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-18",
+      "target": "PostCard",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "本文はテキストのまま、返信先・返信 0・いいね 0",
+      "precondition": "なし",
+      "input": "HTML を含む本文、replyTo あり",
+      "expected": "テキストのまま、返信先、0",
+      "branches": [
+        "B15-T"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-18 PostCard は本文をテキストのまま描き、返信先・返信 0・いいね 0 を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-19",
+      "target": "PostCard",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "カードを押すと onOpen、表示名では呼ばない",
+      "precondition": "なし",
+      "input": "クリック",
+      "expected": "onOpen の呼び出し",
+      "branches": [],
+      "mock": "MemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-19 PostCard を押すと onOpen、表示名を押しても onOpen は呼ばない",
+      "result": "",
+      "note": "実施の手がかり（cleanup なし）"
+    },
+    {
+      "id": "TC-NOUS49_DEV-20",
+      "target": "LoadMoreButton",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "読み込み中は押せない",
+      "precondition": "なし",
+      "input": "loading=true",
+      "expected": "読み込み中…、disabled",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-20 LoadMoreButton は読み込み中に押せない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-21",
+      "target": "router",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "7 ルートの登録",
+      "precondition": "なし",
+      "input": "routes",
+      "expected": "7 つのパス",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-21 7 ルートがすべて登録されている",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-22",
+      "target": "router / FullPageError",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "未知のパスは「ページが見つかりません」とリンク",
+      "precondition": "なし",
+      "input": "/no-such-page",
+      "expected": "見出しと / へのリンク",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、createMemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-22 未知のパスは「ページが見つかりません」とタイムラインへのリンク",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-23",
+      "target": "ObserverLayout",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "AI の帯・このサービスについて・世界の状態",
+      "precondition": "なし",
+      "input": "/",
+      "expected": "帯、リンク、世界は動いています",
+      "branches": [
+        "B6-F",
+        "B7-F",
+        "B8-T",
+        "B9-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、createMemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-23 共通の枠は AI の帯・このサービスについて・世界の状態を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS49_DEV-24",
+      "target": "ObserverLayout（minimal）",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "/not-invited はリンクとフッターを出さず API を呼ばない",
+      "precondition": "なし",
+      "input": "/not-invited",
+      "expected": "リンクなし、fetch 0 回",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、createMemoryRouter",
+      "dev_ref": "実装時のテスト（NOUS-49）",
+      "suspect": "",
+      "test_name": "TC-NOUS49_DEV-24 /not-invited はリンクとフッターを出さず、API を呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-043",
+      "target": "useBanner",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "ObserverLayout の外で使うと例外",
+      "precondition": "なし",
+      "input": "renderHook(useBanner)",
+      "expected": "例外「useBanner は ObserverLayout の中で使う」",
+      "branches": [
+        "B1-T"
+      ],
+      "mock": "console.error を黙らせる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-043 useBanner を ObserverLayout の外で使うと例外になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-044",
+      "target": "reportApiError",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "NotInvitedError ではバナーも全画面の表示も出さない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "NotInvitedError",
+      "expected": "alert なし、子の内容を出す",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B5-F",
+        "B11-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-044 NotInvitedError を渡されても、バナーも全画面の表示も出さない",
+      "result": "",
+      "note": "設計書 4章：遷移済みなので何もしない"
+    },
+    {
+      "id": "TC-UT_OWEB-045",
+      "target": "reportApiError / FullPageError",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "404 で notFound が無ければ「ページが見つかりません」の全画面表示、子は出さない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "ApiError(404)、notFound なし",
+      "expected": "見出し「ページが見つかりません」、/ へのリンク、子なし",
+      "branches": [
+        "B3-T",
+        "B4-F",
+        "B5-T",
+        "B17-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-045 404 で notFound の文言が無ければ「ページが見つかりません」の全画面表示にし、子は出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-046",
+      "target": "reportApiError / ErrorBanner",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "通信エラーは画面ごとの文言の赤色バー、子はそのまま",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "NetworkError、banner=投稿を読み込めませんでした",
+      "expected": "alert に文言、子を出す",
+      "branches": [
+        "B2-F",
+        "B3-F",
+        "B11-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-046 通信エラーは画面ごとの文言の赤色バーにし、子はそのまま出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-047",
+      "target": "ObserverLayout",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "別の画面へ移ると前の画面のバナーを消す",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout、バナーあり",
+      "input": "リンクで /other へ",
+      "expected": "alert なし",
+      "branches": [],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-047 別の画面へ移ると、前の画面のバナーを消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-048",
+      "target": "reportApiError",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "403 は様式③「このネットワークからは閲覧できません」の全画面表示",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "ApiError(403)",
+      "expected": "見出し「このネットワークからは閲覧できません」、alert なし",
+      "branches": [
+        "B3-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "403 も様式②の赤色バーになる（疑い 3）",
+      "test_name": "TC-UT_OWEB-048 403 は様式③の「このネットワークからは閲覧できません」の全画面表示にする",
+      "result": "",
+      "note": "設計書 6章の UI エラーフィードバック"
+    },
+    {
+      "id": "TC-UT_OWEB-049",
+      "target": "ErrorBanner",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "message が null なら何も描かず、文字列なら role=alert で出す",
+      "precondition": "なし",
+      "input": "null → 文字列",
+      "expected": "空 → alert",
+      "branches": [
+        "B11-T",
+        "B11-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-049 ErrorBanner は message が null なら何も描かず、文字列なら role=alert で出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-050",
+      "target": "WorldStatusFooter",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "running 以外（paused・limit_stopped・emergency_stopped・preparing）は「現在、世界は止まっています」",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "各 state",
+      "expected": "現在、世界は止まっています",
+      "branches": [
+        "B8-T",
+        "B9-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "一部 TC-NOUS49_DEV-23（running だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-050 フッターは running 以外の状態では「現在、世界は止まっています」を出す",
+      "result": "",
+      "note": "画面 P101 H04"
+    },
+    {
+      "id": "TC-UT_OWEB-051",
+      "target": "WorldStatusFooter",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "取得に失敗したら「状態を取得できません」、最終更新は出さない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "/api/world 500",
+      "expected": "状態を取得できません、最終更新なし",
+      "branches": [
+        "B7-T",
+        "B10-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-051 フッターは取得に失敗したら「状態を取得できません」を出し、最終更新は出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-052",
+      "target": "WorldStatusFooter",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "取得の前は「状態を取得しています」、最終更新は出さない",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "input": "応答しない fetch",
+      "expected": "状態を取得しています",
+      "branches": [
+        "B7-F",
+        "B8-F",
+        "B10-F"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え（応答しない）、QueryClient（retry なし）、MemoryRouter、ObserverLayout",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-052 フッターは取得の前は「状態を取得しています」を出し、最終更新は出さない",
+      "result": "",
+      "note": "設計書に文言の記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_OWEB-053",
+      "target": "WorldStatusFooter",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "最終更新は取得に成功した端末の時刻を JST の HH:MM で出す",
+      "precondition": "QueryClient（retry なし）、MemoryRouter、ObserverLayout、時刻 2026-10-22T05:21:00Z",
+      "input": "/api/world 成功",
+      "expected": "最終更新 14:21、世界は動いています",
+      "branches": [
+        "B9-T",
+        "B10-T"
+      ],
+      "mock": "fetch を vi.stubGlobal で差し替え、vi.useFakeTimers（setTimeout・setInterval・Date）、画面は前面",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-053 フッターの最終更新は、取得に成功した端末の時刻を JST の HH:MM で出す",
+      "result": "",
+      "note": "画面 P101 H05"
+    },
+    {
+      "id": "TC-UT_OWEB-054",
+      "target": "AgentName",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "linked=false なら表示名をリンクにしない",
+      "precondition": "MemoryRouter",
+      "input": "linked=false",
+      "expected": "リンクなし",
+      "branches": [
+        "B12-F"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-054 AgentName は linked=false なら表示名をリンクにしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-055",
+      "target": "AgentName",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "リンクは agentId をエンコードしたプロフィールへのパス",
+      "precondition": "MemoryRouter",
+      "input": "agentId 'a/b'",
+      "expected": "href /agents/a%2Fb",
+      "branches": [
+        "B12-T"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-055 AgentName のリンクは agentId をエンコードしたプロフィールへのパスにする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-056",
+      "target": "AgentName",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "state が active なら停止中のバッジを出さない",
+      "precondition": "MemoryRouter",
+      "input": "active",
+      "expected": "停止中なし",
+      "branches": [
+        "B13-F"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "一部 TC-NOUS49_DEV-17",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-056 AgentName は state が active なら停止中のバッジを出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-057",
+      "target": "PostCard",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "フォーカスして Enter・スペースで onOpen を呼ぶ",
+      "precondition": "MemoryRouter",
+      "input": "Enter・' '",
+      "expected": "onOpen('P1')",
+      "branches": [
+        "B14-T"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-057 PostCard にフォーカスして Enter・スペースを押すと onOpen を呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-058",
+      "target": "PostCard",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "Enter・スペース以外のキーや中の要素から来たキーでは呼ばない",
+      "precondition": "MemoryRouter",
+      "input": "'a'、表示名で Enter",
+      "expected": "onOpen を呼ばない",
+      "branches": [
+        "B14-F"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-058 PostCard は Enter・スペース以外のキーや、中の要素から来たキーでは onOpen を呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-059",
+      "target": "PostCard",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "返信でなければ返信先を出さず、時刻を「第 N 日 HH:MM」で出す",
+      "precondition": "MemoryRouter",
+      "input": "replyTo null、worldTimeSec 90000",
+      "expected": "返信先なし、第 2 日 01:00",
+      "branches": [
+        "B15-F"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-059 PostCard は返信でなければ返信先を出さず、時刻を「第 N 日 HH:MM」で出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-060",
+      "target": "PostCard",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "カードの中に押せる部品（button）を置かない",
+      "precondition": "MemoryRouter",
+      "input": "いいね 5・返信 3",
+      "expected": "button 0 個、いいね 5",
+      "branches": [],
+      "mock": "MemoryRouter",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-060 PostCard の中には押せる部品（button）を置かない",
+      "result": "",
+      "note": "FR-106"
+    },
+    {
+      "id": "TC-UT_OWEB-061",
+      "target": "LoadMoreButton",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "読み込み中でなければ「さらに読み込む」で押せ、onClick を呼ぶ",
+      "precondition": "なし",
+      "input": "loading=false",
+      "expected": "onClick 1 回",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-061 LoadMoreButton は読み込み中でなければ「さらに読み込む」で押せ、押すと onClick を呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-062",
+      "target": "FullPageError",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "linkToTimeline=false ならリンクを出さない",
+      "precondition": "MemoryRouter",
+      "input": "false",
+      "expected": "見出しだけ",
+      "branches": [
+        "B17-F"
+      ],
+      "mock": "MemoryRouter",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-062 FullPageError は linkToTimeline=false ならタイムラインへのリンクを出さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_OWEB-063",
+      "target": "EmptyState",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "渡された文言をそのまま出す",
+      "precondition": "なし",
+      "input": "まだ投稿はありません",
+      "expected": "その文言",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_OWEB-063 EmptyState は渡された文言をそのまま出す",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
