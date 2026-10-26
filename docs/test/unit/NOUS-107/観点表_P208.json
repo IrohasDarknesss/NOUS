@@ -1,0 +1,827 @@
+{
+  "title": "P208 生成ログ詳細（GenerationDetailPage・pages/generations の概要・入力・全文・試行・矛盾・投稿）",
+  "ticket": "NOUS-107",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/admin/src/pages/GenerationDetailPage.tsx",
+    "apps/admin/src/pages/generations/EventSummary.tsx",
+    "apps/admin/src/pages/generations/InputSection.tsx",
+    "apps/admin/src/pages/generations/PromptViewer.tsx",
+    "apps/admin/src/pages/generations/AttemptTable.tsx",
+    "apps/admin/src/pages/generations/ConsistencyFlags.tsx",
+    "apps/admin/src/pages/generations/ResultPostCard.tsx"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "test_files": [
+    "apps/admin/src/pages/generations/generations.test.tsx（実装時、NOUS-71）",
+    "apps/admin/src/pages/generations/generations.ut.test.tsx（単体テストで追加）"
+  ],
+  "dependencies": [
+    "管理 API（fetch。mockFetch で差し替える）",
+    "クリップボード（navigator.clipboard を差し替える）",
+    "時計（コピーの表示の 2 秒は vi.useFakeTimers で進める）",
+    "react-router（renderApp・MemoryRouter）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 admin_agents_logs 2〜6章",
+    "画面基本設計書 P208 v1.2 4〜7章"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "isNotFound（ApiError で status 404 または code EVENT_NOT_FOUND）",
+      "location": "GenerationDetailPage.tsx:34-37"
+    },
+    {
+      "id": "B2",
+      "condition": "!query.isError || !query.error || isNotFound（ポップアップを出さない）",
+      "location": "GenerationDetailPage.tsx:40"
+    },
+    {
+      "id": "B3",
+      "condition": "ApiError で status >= 500、または NetworkError",
+      "location": "GenerationDetailPage.tsx:41"
+    },
+    {
+      "id": "B4",
+      "condition": "isNotFound（見つからない画面を描く）",
+      "location": "GenerationDetailPage.tsx:55"
+    },
+    {
+      "id": "B5",
+      "condition": "data（詳細を描く）",
+      "location": "GenerationDetailPage.tsx:85"
+    },
+    {
+      "id": "B6",
+      "condition": "!iso（formatDateTimeJst）",
+      "location": "EventSummary.tsx:16"
+    },
+    {
+      "id": "B7",
+      "condition": "Number.isNaN(ms)（formatDateTimeJst）",
+      "location": "EventSummary.tsx:18"
+    },
+    {
+      "id": "B8",
+      "condition": "navigator.clipboard.writeText がある",
+      "location": "EventSummary.tsx:26"
+    },
+    {
+      "id": "B9",
+      "condition": "writeText が例外（catch）",
+      "location": "EventSummary.tsx:30"
+    },
+    {
+      "id": "B10",
+      "condition": "targetElement && getSelection（選択状態にする）",
+      "location": "EventSummary.tsx:33"
+    },
+    {
+      "id": "B11",
+      "condition": "ok（トーストを出す）",
+      "location": "EventSummary.tsx:62"
+    },
+    {
+      "id": "B12",
+      "condition": "copied（「コピー済み」）",
+      "location": "EventSummary.tsx:98"
+    },
+    {
+      "id": "B13",
+      "condition": "action ?? \"―\"",
+      "location": "EventSummary.tsx:123"
+    },
+    {
+      "id": "B14",
+      "condition": "modelId ?? \"―\"・promptVersion ?? \"―\"",
+      "location": "EventSummary.tsx:136"
+    },
+    {
+      "id": "B15",
+      "condition": "value が null・undefined（formatJsonValue）",
+      "location": "InputSection.tsx:26"
+    },
+    {
+      "id": "B16",
+      "condition": "typeof value === \"string\"",
+      "location": "InputSection.tsx:27"
+    },
+    {
+      "id": "B17",
+      "condition": "number・boolean（それ以外は JSON.stringify）",
+      "location": "InputSection.tsx:28"
+    },
+    {
+      "id": "B18",
+      "condition": "記憶がオブジェクト（配列でない）",
+      "location": "InputSection.tsx:46"
+    },
+    {
+      "id": "B19",
+      "condition": "kind → type → #番号",
+      "location": "InputSection.tsx:48"
+    },
+    {
+      "id": "B20",
+      "condition": "MEMORY_KIND_LABELS[rawKind] ?? rawKind",
+      "location": "InputSection.tsx:49"
+    },
+    {
+      "id": "B21",
+      "condition": "content → text → summary → JSON",
+      "location": "InputSection.tsx:50-57"
+    },
+    {
+      "id": "B22",
+      "condition": "ATTRIBUTE_LABELS[key] ?? key",
+      "location": "InputSection.tsx:72"
+    },
+    {
+      "id": "B23",
+      "condition": "actionCandidates && length > 0",
+      "location": "InputSection.tsx:113"
+    },
+    {
+      "id": "B24",
+      "condition": "decidedBy === \"llm\"（記憶・参照した投稿を出す）",
+      "location": "InputSection.tsx:122"
+    },
+    {
+      "id": "B25",
+      "condition": "promptText !== null（開閉のボタン）",
+      "location": "PromptViewer.tsx:41"
+    },
+    {
+      "id": "B26",
+      "condition": "promptText === null",
+      "location": "PromptViewer.tsx:52"
+    },
+    {
+      "id": "B27",
+      "condition": "expanded",
+      "location": "PromptViewer.tsx:54"
+    },
+    {
+      "id": "B28",
+      "condition": "outputText === null",
+      "location": "PromptViewer.tsx:65"
+    },
+    {
+      "id": "B29",
+      "condition": "httpStatus ?? \"―\"",
+      "location": "AttemptTable.tsx:24"
+    },
+    {
+      "id": "B30",
+      "condition": "errorDetail ?? \"―\"",
+      "location": "AttemptTable.tsx:25"
+    },
+    {
+      "id": "B31",
+      "condition": "typeof flag === \"string\"（describeFlag）",
+      "location": "ConsistencyFlags.tsx:14"
+    },
+    {
+      "id": "B32",
+      "condition": "CONSISTENCY_FLAG_LABELS[code] ?? code",
+      "location": "ConsistencyFlags.tsx:15"
+    },
+    {
+      "id": "B33",
+      "condition": "!flags || flags.length === 0",
+      "location": "ConsistencyFlags.tsx:35"
+    },
+    {
+      "id": "B34",
+      "condition": "f.detail（括弧で添える）",
+      "location": "ConsistencyFlags.tsx:44"
+    },
+    {
+      "id": "B35",
+      "condition": "!post（ResultPostCard）",
+      "location": "ResultPostCard.tsx:39"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS71_DEV-09",
+      "target": "describeFlag",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "C01〜C04 を日本語の説明に変える",
+      "precondition": "なし",
+      "input": "C01〜C04、{ code: C02 }",
+      "expected": "4 つの日本語",
+      "branches": [
+        "B31-T",
+        "B31-F",
+        "B32-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-09 describeFlag：C01〜C04 を日本語の説明に変える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-12",
+      "target": "GenerationDetailPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "プロンプトの開閉・試行・矛盾の候補・生成された投稿を描画する",
+      "precondition": "LLM で成功した詳細（矛盾 2 件、投稿あり）",
+      "input": "/generations/{id}、入力の全文を開く、非表示管理で開く",
+      "expected": "実行 ID・出力・開いた入力・1,930 ms・C01／C03・投稿の本文、/moderation?postId=…",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B4-F",
+        "B5-T",
+        "B13-F",
+        "B14-F",
+        "B16-T",
+        "B18-T",
+        "B19-T",
+        "B20-F",
+        "B21-T",
+        "B22-F",
+        "B23-T",
+        "B24-T",
+        "B25-T",
+        "B26-F",
+        "B27-T",
+        "B27-F",
+        "B28-F",
+        "B29-F",
+        "B30-T",
+        "B33-F",
+        "B34-T",
+        "B35-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-12 GenerationDetailPage：プロンプトの開閉・試行・矛盾の候補・生成された投稿を描画する",
+      "result": "",
+      "note": "DEV の詳細は inputAttributes を displayName（camelCase）で持たせているが、サーバーは snake_case で返す。issues の疑い 1"
+    },
+    {
+      "id": "TC-NOUS71_DEV-13",
+      "target": "GenerationDetailPage",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "404 EVENT_NOT_FOUND のときは「生成イベントが見つかりません」と一覧へのリンクを表示する（様式③）",
+      "precondition": "詳細の API が 404 EVENT_NOT_FOUND",
+      "input": "/generations/{id}",
+      "expected": "文言と /generations へのリンク",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B4-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-13 GenerationDetailPage：404 EVENT_NOT_FOUND のときは「生成イベントが見つかりません」と一覧へのリンクを表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-001",
+      "target": "formatDateTimeJst",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "日時は JST の「YYYY-MM-DD HH:MM:SS」で出し、無いときは「―」、読めない値はそのまま出す",
+      "precondition": "なし",
+      "input": "15:00:00Z、null、\"x\"",
+      "expected": "\"2026-10-23 00:00:00\"、\"―\"、\"x\"",
+      "branches": [
+        "B6-T",
+        "B6-F",
+        "B7-T",
+        "B7-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-001 日時は JST の「YYYY-MM-DD HH:MM:SS」で出し、無いときは「―」、読めない値はそのまま出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-002",
+      "target": "copyEventId",
+      "category": "正常系",
+      "technique": "依存",
+      "viewpoint": "クリップボードが使えれば実行 ID を写して true を返す",
+      "precondition": "navigator.clipboard.writeText を差し替え（成功）",
+      "input": "実行 ID",
+      "expected": "true、writeText(実行 ID)",
+      "branches": [
+        "B8-T",
+        "B9-F"
+      ],
+      "mock": "navigator.clipboard を Object.defineProperty で差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-002 クリップボードが使えれば実行 ID を写して true を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-003",
+      "target": "copyEventId",
+      "category": "異常系",
+      "technique": "依存",
+      "viewpoint": "クリップボードへの書き込みが失敗したら、実行 ID の要素を選択状態にして false を返す",
+      "precondition": "writeText が reject",
+      "input": "実行 ID、要素",
+      "expected": "false、選択範囲が 1 つ",
+      "branches": [
+        "B8-T",
+        "B9-T",
+        "B10-T"
+      ],
+      "mock": "navigator.clipboard を差し替え（reject）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-003 クリップボードへの書き込みが失敗したら、実行 ID の要素を選択状態にして false を返す",
+      "result": "",
+      "note": "設計書 4章「クリップボードが使えなければ選択状態にする」"
+    },
+    {
+      "id": "TC-UT_P208-004",
+      "target": "copyEventId",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "クリップボードも選択する要素も無ければ、例外にせず false を返す",
+      "precondition": "navigator.clipboard が undefined",
+      "input": "実行 ID、null",
+      "expected": "false",
+      "branches": [
+        "B8-F",
+        "B10-F"
+      ],
+      "mock": "navigator.clipboard を undefined に差し替え",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-004 クリップボードも選択する要素も無ければ、例外にせず false を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-005",
+      "target": "EventSummary",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "「コピー」を押すと「コピー済み」と「コピーしました」を出し、2 秒後に「コピー」に戻す（E02）",
+      "precondition": "成功した詳細",
+      "input": "コピーを押し、時計を 2 秒進める",
+      "expected": "「コピー済み」とトースト「コピーしました」→「コピー」",
+      "branches": [
+        "B8-T",
+        "B11-T",
+        "B12-T",
+        "B12-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）、navigator.clipboard を差し替え、vi.useFakeTimers（shouldAdvanceTime）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-005 「コピー」を押すと「コピー済み」と「コピーしました」を出し、2 秒後に「コピー」に戻す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-006",
+      "target": "EventSummary",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "概要に @ハンドル・巡と種・モデルと版・利用量（3 桁区切りと小数 1 桁、0 円）・時刻を出し、終了が無ければ「―」",
+      "precondition": "invalid_format で失敗した詳細（Neurons 31、入力 2960、終了なし）",
+      "input": "/generations/{id}",
+      "expected": "@minato、巡 22 ／ 種 834201、モデル ／ 版 v1（cloudflare）、入力 2,960 … 31.0 Neurons ・ 概算費用 0 円、終了 ―、失敗（不正な形式）",
+      "branches": [
+        "B5-T",
+        "B6-T",
+        "B13-T",
+        "B14-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "一部 TC-NOUS71_DEV-12（実行 ID と本文だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P208-006 概要に @ハンドル・巡と種・モデルと版・利用量（3 桁区切りと小数 1 桁、0 円）・時刻を出し、終了が無ければ「―」",
+      "result": "",
+      "note": "NOUS-104 の決定（invalid_format の失敗にも Neurons を加算する）を受け、失敗の詳細でも Neurons を出すことを確かめる"
+    },
+    {
+      "id": "TC-UT_P208-007",
+      "target": "EventSummary",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "参加しない（gate）の生成イベントは、行動・モデル・版を「―」、決め方を「参加しない」と出す",
+      "precondition": "gate の詳細（action・modelId・promptVersion が null、llm_mode fixed）",
+      "input": "/generations/{id}",
+      "expected": "「行動：― ／ 決め方：参加しない ／ 失敗の種類：―」「― ／ 版 ―（fixed）」",
+      "branches": [
+        "B13-T",
+        "B14-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-007 参加しない（gate）の生成イベントは、行動・モデル・版を「―」、決め方を「参加しない」と出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-008",
+      "target": "InputSection",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "入力に用いた属性は、サーバーが送る項目名（display_name・values_text・activity_level）も日本語の項目名で出す",
+      "precondition": "なし",
+      "input": "inputAttributes { display_name, values_text, activity_level: 3, interests }",
+      "expected": "「表示名」「価値観」「活動頻度」「興味」。display_name のままは出さない",
+      "branches": [
+        "B16-T",
+        "B16-F",
+        "B17-T",
+        "B22-T",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-12（camelCase の項目名だけ）",
+      "suspect": "InputSection の項目名の表は displayName・valuesText・activityLevel（camelCase）で引くが、サーバーは generation_events.input_attributes（promptBuilder の UsedAttributes、snake_case）をそのまま返すため、表示名・価値観・活動頻度が英語の項目名のまま出る",
+      "test_name": "TC-UT_P208-008 入力に用いた属性は、サーバーが送る項目名（display_name・values_text・activity_level）も日本語の項目名で出す",
+      "result": "",
+      "note": "FR-207（入力に用いた属性を日本語で確かめられること）。issues の疑い 1"
+    },
+    {
+      "id": "TC-UT_P208-009",
+      "target": "InputSection",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "参加しない（gate）の生成イベントは、行動の候補・記憶・参照した投稿を出さない",
+      "precondition": "なし",
+      "input": "decidedBy gate、actionCandidates null",
+      "expected": "属性は出す。行動の候補・記憶・参照した投稿の見出しは出さない",
+      "branches": [
+        "B23-F",
+        "B24-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "今の InputSection は gate でも「行動の候補」を出し、「なし」と表示する",
+      "test_name": "TC-UT_P208-009 参加しない（gate）の生成イベントは、行動の候補・記憶・参照した投稿を出さない",
+      "result": "",
+      "note": "画面基本設計書 H08 は「decided_by が llm のとき」。issues の疑い 2"
+    },
+    {
+      "id": "TC-UT_P208-010",
+      "target": "InputSection",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "記憶は kind・type・番号の順で種類を決め、content・text・summary の順で内容を出す",
+      "precondition": "なし",
+      "input": "{kind, content}、{type, text}、文字列、{summary}",
+      "expected": "最近の自分の投稿／内容A、custom／内容B、#3／内容C、#4／内容D",
+      "branches": [
+        "B15-F",
+        "B16-T",
+        "B18-T",
+        "B18-F",
+        "B19-T",
+        "B19-F",
+        "B20-T",
+        "B20-F",
+        "B21-T",
+        "B21-F",
+        "B24-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-12（{kind, content} だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P208-010 記憶は kind・type・番号の順で種類を決め、content・text・summary の順で内容を出す",
+      "result": "",
+      "note": "サーバーが入れるのは {kind, content} の形だけ。type・text・summary は防御のための分岐"
+    },
+    {
+      "id": "TC-UT_P208-011",
+      "target": "InputSection",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "LLM の生成で記憶・参照した投稿・候補が無ければ、それぞれ「ありません」「なし」と出す",
+      "precondition": "なし",
+      "input": "inputMemories []、refPosts []、actionCandidates []",
+      "expected": "「記憶はありません」「参照した投稿はありません」「なし」",
+      "branches": [
+        "B23-F",
+        "B24-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-011 LLM の生成で記憶・参照した投稿・候補が無ければ、それぞれ「ありません」「なし」と出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-012",
+      "target": "PromptViewer",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "入力の全文が無ければ開閉のボタンを出さず「なし（LLM を呼んでいません）」、出力が無ければ「なし」",
+      "precondition": "なし",
+      "input": "promptText null、outputText null",
+      "expected": "その 2 つの文言、ボタンなし",
+      "branches": [
+        "B25-F",
+        "B26-T",
+        "B28-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-012 入力の全文が無ければ開閉のボタンを出さず「なし（LLM を呼んでいません）」、出力が無ければ「なし」",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-013",
+      "target": "PromptViewer",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "折りたたみ中は字数をコードポイントで出し、ボタンを 2 回押すと閉じる（E03）",
+      "precondition": "なし",
+      "input": "promptText \"𠮷あa\"",
+      "expected": "「折りたたんでいます（3 字）」、aria-expanded false → true、2 回目で閉じる",
+      "branches": [
+        "B25-T",
+        "B26-F",
+        "B27-T",
+        "B27-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-12（開くだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P208-013 折りたたみ中は字数をコードポイントで出し、ボタンを 2 回押すと閉じる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-014",
+      "target": "PromptViewer",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "入力・出力の全文に HTML があっても、文字のまま出して要素にしない",
+      "precondition": "なし",
+      "input": "\"<i>入力</i>\"、\"<b>太字</b>\"",
+      "expected": "textContent がそのまま、b・i の要素が無い",
+      "branches": [
+        "B27-T",
+        "B28-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-014 入力・出力の全文に HTML があっても、文字のまま出して要素にしない",
+      "result": "",
+      "note": "画面基本設計書 7章「他のエージェントの投稿の本文はテキストとして表示し、HTML として解釈しない」"
+    },
+    {
+      "id": "TC-UT_P208-015",
+      "target": "AttemptTable",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "試行の表は、不正な形式の試行にも Neurons を出し、HTTP とエラーの内容が無ければ「―」",
+      "precondition": "なし",
+      "input": "invalid_format（Neurons 15.5、12345 ms）、timeout（HTTP・エラーの内容なし）",
+      "expected": "「不正な形式」「15.5」「12,345 ms」、「タイムアウト」と「―」2 つ",
+      "branches": [
+        "B29-T",
+        "B29-F",
+        "B30-T",
+        "B30-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-12（成功の 1 件だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P208-015 試行の表は、不正な形式の試行にも Neurons を出し、HTTP とエラーの内容が無ければ「―」",
+      "result": "",
+      "note": "NOUS-104 の決定とつながる観点"
+    },
+    {
+      "id": "TC-UT_P208-016",
+      "target": "AttemptTable",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "試行が無ければ「試行はありません」を出す",
+      "precondition": "なし",
+      "input": "attempts []",
+      "expected": "その文言",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-016 試行が無ければ「試行はありません」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-017",
+      "target": "ConsistencyFlags",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "矛盾の候補が null・0 件なら「なし」、内容が空なら括弧を付けない",
+      "precondition": "なし",
+      "input": "null、[]、[{ C02, detail \"\" }]",
+      "expected": "「なし」2 回、「C02：過去の発言の繰り返し」で括弧なし",
+      "branches": [
+        "B33-T",
+        "B33-F",
+        "B34-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-017 矛盾の候補が null・0 件なら「なし」、内容が空なら括弧を付けない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-018",
+      "target": "describeFlag",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "知らないコードは、そのままのコードを説明として返す",
+      "precondition": "なし",
+      "input": "\"C99\"",
+      "expected": "\"C99\"",
+      "branches": [
+        "B31-T",
+        "B32-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-018 知らないコードは、そのままのコードを説明として返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-019",
+      "target": "ResultPostCard",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "生成された投稿が無ければ「なし」、非表示の投稿は「非表示」と出し、本文の HTML は文字のまま出す",
+      "precondition": "MemoryRouter の中で描く",
+      "input": "post null、{ body \"<b>本文</b>\", hidden }",
+      "expected": "「なし」、「非表示」、本文はそのままの文字で b 要素なし",
+      "branches": [
+        "B35-T",
+        "B35-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-12（公開の投稿だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P208-019 生成された投稿が無ければ「なし」、非表示の投稿は「非表示」と出し、本文の HTML は文字のまま出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-020",
+      "target": "buildModerationPath",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "非表示管理への URL は、投稿 ID を URL に使える形にして付ける",
+      "precondition": "なし",
+      "input": "\"a b/c\"",
+      "expected": "\"/moderation?postId=a%20b%2Fc\"",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-12（ULID だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P208-020 非表示管理への URL は、投稿 ID を URL に使える形にして付ける",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-024",
+      "target": "EventSummary",
+      "category": "異常系",
+      "technique": "依存",
+      "viewpoint": "クリップボードに写せなかったときは「コピー済み」にするが、「コピーしました」は出さない",
+      "precondition": "成功した詳細。writeText が reject",
+      "input": "コピーを押す",
+      "expected": "「コピー済み」、トーストなし",
+      "branches": [
+        "B8-T",
+        "B9-T",
+        "B11-F",
+        "B12-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）、navigator.clipboard を差し替え（reject）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-024 クリップボードに写せなかったときは「コピー済み」にするが、「コピーしました」は出さない",
+      "result": "",
+      "note": "設計書 4章（使えなければ選択状態にする）。トーストを出さないのは実装の値"
+    },
+    {
+      "id": "TC-UT_P208-025",
+      "target": "InputSection",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "属性の値は、null を「―」、真偽値を文字に、オブジェクトを JSON にして出す",
+      "precondition": "なし",
+      "input": "inputAttributes { bio: null, flag: true, extra: { a: 1 } }",
+      "expected": "自己紹介／―、flag／true、extra／{\"a\":1}",
+      "branches": [
+        "B15-T",
+        "B16-F",
+        "B17-T",
+        "B17-F",
+        "B22-T",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-025 属性の値は、null を「―」、真偽値を文字に、オブジェクトを JSON にして出す",
+      "result": "",
+      "note": "サーバーは文字列と数だけを入れる。null・真偽値・オブジェクトは防御のための分岐"
+    },
+    {
+      "id": "TC-UT_P208-021",
+      "target": "GenerationDetailPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "詳細の取得が 500 なら「生成ログを取得できませんでした」をポップアップで出す（様式①）",
+      "precondition": "詳細の API が 500",
+      "input": "/generations/{id}",
+      "expected": "ポップアップの文言。見つからない画面は出さない",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-T",
+        "B4-F",
+        "B5-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-021 詳細の取得が 500 なら「生成ログを取得できませんでした」をポップアップで出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-022",
+      "target": "GenerationDetailPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "詳細の取得が 401 ならセッション切れのポップアップを出す",
+      "precondition": "詳細の API が 401",
+      "input": "/generations/{id}",
+      "expected": "セッション切れの文言",
+      "branches": [
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P208-022 詳細の取得が 401 ならセッション切れのポップアップを出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P208-023",
+      "target": "GenerationDetailPage",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "404 なら、コードが EVENT_NOT_FOUND でなくても「生成イベントが見つかりません」を出し、ポップアップは出さない",
+      "precondition": "詳細の API が 404 NOT_FOUND",
+      "input": "/generations/{id}",
+      "expected": "見つからない画面。dialog なし",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B4-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "一部 TC-NOUS71_DEV-13（EVENT_NOT_FOUND だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P208-023 404 なら、コードが EVENT_NOT_FOUND でなくても「生成イベントが見つかりません」を出し、ポップアップは出さない",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "疑い 1：InputSection の項目名の表は displayName・valuesText・activityLevel（camelCase）で引くが、サーバーの詳細 API は generation_events.input_attributes をそのまま返し、その中身は promptBuilder の UsedAttributes（display_name・values_text・activity_level、snake_case）である。そのため P208 では表示名・価値観・活動頻度が英語の項目名のまま出る（TC-UT_P208-008）。DEV-12 は camelCase の値で書かれていて、この食い違いを見ていない。",
+    "疑い 2：画面基本設計書 H08（行動の候補）は「decided_by が llm のとき」だけ出す項目だが、InputSection は gate でも見出しを出し「なし」と表示する（TC-UT_P208-009）。記憶・参照した投稿は llm のときだけで、設計どおり。",
+    "確認事項 3：P208 の様式①の文言は、画面基本設計書が「生成ログを取得できませんでした」（後半なし）、P207 が「…時間をおいて再度お試しください」付きで、画面ごとに違う。実装はどちらも設計どおり。"
+  ]
+}

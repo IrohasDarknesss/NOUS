@@ -1,0 +1,866 @@
+{
+  "title": "P207 生成ログ一覧（GenerationListPage・pages/generations の絞り込み・表・状態バッジ）",
+  "ticket": "NOUS-107",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/admin/src/pages/GenerationListPage.tsx",
+    "apps/admin/src/pages/generations/GenerationFilters.tsx",
+    "apps/admin/src/pages/generations/GenerationTable.tsx",
+    "apps/admin/src/pages/generations/StatusBadge.tsx"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "test_files": [
+    "apps/admin/src/pages/generations/generations.test.tsx（実装時、NOUS-71）",
+    "apps/admin/src/pages/generations/generations.ut.test.tsx（単体テストで追加）"
+  ],
+  "dependencies": [
+    "管理 API（fetch。mockFetch で差し替える）",
+    "TanStack Query（useInfiniteQuery。renderApp の QueryClient）",
+    "react-router（renderApp の createMemoryRouter。URL の検索パラメータを読む）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 admin_agents_logs 2〜6章",
+    "画面基本設計書 P207 v1.2 4〜7章"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "action が ACTIONS に含まれる",
+      "location": "GenerationListPage.tsx:26-27"
+    },
+    {
+      "id": "B2",
+      "condition": "status が GENERATION_STATUSES に含まれる",
+      "location": "GenerationListPage.tsx:29-32"
+    },
+    {
+      "id": "B3",
+      "condition": "searchParams.get(…) || undefined（agentId・from・to が空でない）",
+      "location": "GenerationListPage.tsx:24・33・34"
+    },
+    {
+      "id": "B4",
+      "condition": "buildGenerationSearchParams の各項目に値がある",
+      "location": "GenerationListPage.tsx:40-44"
+    },
+    {
+      "id": "B5",
+      "condition": "lastPage.nextCursor ?? undefined（続きがある）",
+      "location": "GenerationListPage.tsx:67"
+    },
+    {
+      "id": "B6",
+      "condition": "query.isError && query.error",
+      "location": "GenerationListPage.tsx:75"
+    },
+    {
+      "id": "B7",
+      "condition": "ApiError で status >= 500、または NetworkError",
+      "location": "GenerationListPage.tsx:76"
+    },
+    {
+      "id": "B8",
+      "condition": "hasNextPage（さらに読み込むを出す）",
+      "location": "GenerationListPage.tsx:111"
+    },
+    {
+      "id": "B9",
+      "condition": "isFetchingNextPage（読み込み中）",
+      "location": "GenerationListPage.tsx:113-114"
+    },
+    {
+      "id": "B10",
+      "condition": "!iso（toLocalDateTime）",
+      "location": "GenerationFilters.tsx:19"
+    },
+    {
+      "id": "B11",
+      "condition": "Number.isNaN(ms)（toLocalDateTime）",
+      "location": "GenerationFilters.tsx:21"
+    },
+    {
+      "id": "B12",
+      "condition": "!trimmed（toUtcIso）",
+      "location": "GenerationFilters.tsx:29"
+    },
+    {
+      "id": "B13",
+      "condition": "YYYY-MM-DDTHH:mm の形（:00 を足す）",
+      "location": "GenerationFilters.tsx:30"
+    },
+    {
+      "id": "B14",
+      "condition": "hasOffset（Z か ±HH:MM がある）",
+      "location": "GenerationFilters.tsx:31-32"
+    },
+    {
+      "id": "B15",
+      "condition": "Number.isNaN(d.getTime())（toUtcIso）",
+      "location": "GenerationFilters.tsx:33"
+    },
+    {
+      "id": "B16",
+      "condition": "!fromIso || !toIso（validateGenerationRange）",
+      "location": "GenerationFilters.tsx:39"
+    },
+    {
+      "id": "B17",
+      "condition": "Date.parse(from) > Date.parse(to)",
+      "location": "GenerationFilters.tsx:40"
+    },
+    {
+      "id": "B18",
+      "condition": "!EVENT_ID_PATTERN.test(trimmed)",
+      "location": "GenerationFilters.tsx:47"
+    },
+    {
+      "id": "B19",
+      "condition": "!err（期間を変える）",
+      "location": "GenerationFilters.tsx:100"
+    },
+    {
+      "id": "B20",
+      "condition": "eventIdError（入力で文言を消す）",
+      "location": "GenerationFilters.tsx:191"
+    },
+    {
+      "id": "B21",
+      "condition": "絞り込みのどれかに値がある（クリアを出す）",
+      "location": "GenerationFilters.tsx:198"
+    },
+    {
+      "id": "B22",
+      "condition": "Number.isNaN(ms)（formatStartedTimeJst）",
+      "location": "GenerationTable.tsx:18"
+    },
+    {
+      "id": "B23",
+      "condition": "r.action ?? \"―\"",
+      "location": "GenerationTable.tsx:33"
+    },
+    {
+      "id": "B24",
+      "condition": "status が failed・cancelled・interrupted（失敗の種類を出す）",
+      "location": "GenerationTable.tsx:44"
+    },
+    {
+      "id": "B25",
+      "condition": "decidedBy === \"gate\"（Neurons を 0）",
+      "location": "GenerationTable.tsx:52"
+    },
+    {
+      "id": "B26",
+      "condition": "hasConsistencyFlags",
+      "location": "GenerationTable.tsx:59"
+    },
+    {
+      "id": "B27",
+      "condition": "showFailure（失敗・取り消し・中断で failureKind がある）",
+      "location": "StatusBadge.tsx:43"
+    },
+    {
+      "id": "B28",
+      "condition": "!kind（formatFailureKind）",
+      "location": "StatusBadge.tsx:33"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS71_DEV-07",
+      "target": "searchByEventId",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "26 字の ULID でなければエラー、合えば /generations/{id} へ移動する",
+      "precondition": "なし",
+      "input": "\"short\"、I を含む 26 字、正しい 26 字",
+      "expected": "文言 2 回と navigate なし、正しい ID は navigate",
+      "branches": [
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-07 searchByEventId：26 字の ULID でなければエラー、合えば /generations/{id} へ移動する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-08",
+      "target": "toUtcIso / toLocalDateTime",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "JST の入力と UTC の ISO 8601 を相互に変換する",
+      "precondition": "なし",
+      "input": "\"2026-10-22T14:20\"、undefined、\"\"",
+      "expected": "05:20Z と 14:20 の往復、空",
+      "branches": [
+        "B10-T",
+        "B10-F",
+        "B11-F",
+        "B12-T",
+        "B12-F",
+        "B13-T",
+        "B14-F",
+        "B15-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-08 toUtcIso / toLocalDateTime：JST の入力と UTC の ISO 8601 を相互に変換する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-10",
+      "target": "StatusBadge",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "状態ごとの色と文言を出し、失敗のときは failureKind も出す",
+      "precondition": "なし",
+      "input": "succeeded・failed＋invalid_format・cancelled＋cancelled・interrupted・running",
+      "expected": "成功・失敗（不正な形式）・取り消し（取り消し）・中断・実行中と各色",
+      "branches": [
+        "B27-T",
+        "B27-F",
+        "B28-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-10 StatusBadge：状態ごとの色と文言を出し、失敗のときは failureKind も出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-11",
+      "target": "GenerationListPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "絞り込みの変更が URL の検索パラメータに入り、行クリックで詳細へ遷移する",
+      "precondition": "エージェント 1 体、生成イベント 1 件",
+      "input": "状態 failed、行動 post を選び、行を押す",
+      "expected": "URL に status・action、/generations/{id} へ",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B4-T",
+        "B5-F",
+        "B6-F",
+        "B8-F",
+        "B23-F",
+        "B24-F",
+        "B25-F",
+        "B26-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-11 GenerationListPage：絞り込みの変更が URL の検索パラメータに入り、行クリックで詳細へ遷移する",
+      "result": "",
+      "note": "エージェントの選択肢にも「ミナト」があるため、findByText(\"ミナト\") が複数の要素に当たる可能性がある。issues の確認事項 4"
+    },
+    {
+      "id": "TC-UT_P207-001",
+      "target": "parseGenerationFilters",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "URL の知らない行動・状態と、空の値は絞り込みに入れない",
+      "precondition": "なし",
+      "input": "action=repost&status=done&agentId=&from=&to=",
+      "expected": "すべて undefined",
+      "branches": [
+        "B1-F",
+        "B2-F",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-001 URL の知らない行動・状態と、空の値は絞り込みに入れない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-002",
+      "target": "buildGenerationSearchParams / parseGenerationFilters",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "値のある項目だけを URL に入れ、URL から読み直すと同じ絞り込みになる",
+      "precondition": "なし",
+      "input": "agentId・status・from だけ",
+      "expected": "キーは agentId・status・from の順、読み直すと等しい",
+      "branches": [
+        "B2-T",
+        "B3-T",
+        "B4-T",
+        "B4-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-11（画面の操作だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P207-002 絞り込みは値のある項目だけを URL に入れ、URL から読み直すと同じ絞り込みになる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-003",
+      "target": "toUtcIso",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "秒まである JST の入力も UTC に変える",
+      "precondition": "なし",
+      "input": "\"2026-10-22T14:20:30\"",
+      "expected": "\"2026-10-22T05:20:30.000Z\"",
+      "branches": [
+        "B12-F",
+        "B13-F",
+        "B14-F",
+        "B15-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-08（分までだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P207-003 toUtcIso は秒まである JST の入力も UTC に変える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-004",
+      "target": "toUtcIso",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "Z や +09:00 の付いた値をその時刻のまま扱い、読めない値は空にする",
+      "precondition": "なし",
+      "input": "\"…05:20:00Z\"、\"…14:20:00+09:00\"、\"abc\"",
+      "expected": "05:20Z、05:20Z、\"\"",
+      "branches": [
+        "B14-T",
+        "B14-F",
+        "B15-T",
+        "B15-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-004 toUtcIso は Z や +09:00 の付いた値をその時刻のまま扱い、読めない値は空にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-005",
+      "target": "toUtcIso",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "JST の 8:59 は UTC の前の日、9:00 は同じ日の 00:00 になる",
+      "precondition": "なし",
+      "input": "\"2026-10-22T08:59\"、\"2026-10-22T09:00\"",
+      "expected": "2026-10-21T23:59Z、2026-10-22T00:00Z",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-005 JST の 8:59 は UTC の前の日、9:00 は同じ日の 00:00 になる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-006",
+      "target": "toLocalDateTime",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "UTC の 15:00 を JST の翌日 00:00 にし、読めない値は空にする",
+      "precondition": "なし",
+      "input": "\"2026-10-21T15:00:00.000Z\"、\"not-a-date\"",
+      "expected": "\"2026-10-22T00:00\"、\"\"",
+      "branches": [
+        "B10-F",
+        "B11-T",
+        "B11-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-006 toLocalDateTime は UTC の 15:00 を JST の翌日 00:00 にし、読めない値は空にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-007",
+      "target": "validateGenerationRange",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "開始と終了が同じ時刻なら通し、1 秒でも開始が後なら文言を返し、片方だけなら通す",
+      "precondition": "なし",
+      "input": "同じ時刻、開始が 1 秒後、終了なし",
+      "expected": "null、「開始は終了より前にしてください」、null",
+      "branches": [
+        "B16-T",
+        "B16-F",
+        "B17-T",
+        "B17-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-007 期間は開始と終了が同じ時刻なら通し、開始が後なら文言を返し、片方だけなら通す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-008",
+      "target": "searchByEventId",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "前後の空白を除いて検索し、25 字・27 字は文言を返す",
+      "precondition": "なし",
+      "input": "空白付きの正しい ID、25 字、27 字",
+      "expected": "空白付きは /generations/{id} へ、25・27 字は「実行 ID は 26 字です」",
+      "branches": [
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-07（字数の境界と空白を見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_P207-008 実行 ID は前後の空白を除いて検索し、25 字・27 字は文言を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-009",
+      "target": "searchByEventId",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "実行 ID の英小文字は受け付けない",
+      "precondition": "なし",
+      "input": "正しい ID を英小文字にしたもの",
+      "expected": "「実行 ID は 26 字です」、navigate なし",
+      "branches": [
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-009 実行 ID の英小文字は受け付けない",
+      "result": "",
+      "note": "設計書 6章の正規表現（英大文字のみ）どおり。issues の確認事項 3"
+    },
+    {
+      "id": "TC-UT_P207-010",
+      "target": "GenerationFilters",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "期間の開始を終了より後にすると、入力欄の下に文言を出し（様式④）、絞り込みを変えない",
+      "precondition": "filters {}",
+      "input": "開始 2026-10-22T15:00、次に終了 2026-10-22T14:00",
+      "expected": "1 回目は onChange({ from: 06:00Z })、2 回目は文言を出し onChange を呼ばない",
+      "branches": [
+        "B16-T",
+        "B16-F",
+        "B17-T",
+        "B19-T",
+        "B19-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-010 期間の開始を終了より後にすると、入力欄の下に文言を出し、絞り込みを変えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-011",
+      "target": "GenerationFilters",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "期間を入れると、ほかの絞り込みを残したまま、UTC の ISO 8601 で絞り込みを変える",
+      "precondition": "filters { status: failed }",
+      "input": "開始 2026-10-22T09:00",
+      "expected": "onChange({ status: failed, from: 2026-10-22T00:00:00.000Z })",
+      "branches": [
+        "B16-T",
+        "B19-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-011 期間を入れると、ほかの絞り込みを残したまま、UTC の ISO 8601 で絞り込みを変える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-012",
+      "target": "GenerationFilters",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "実行 ID が誤っていれば文言を出し、入力を直すと文言を消す",
+      "precondition": "なし",
+      "input": "\"abc\" で検索、続けて \"d\" を入力",
+      "expected": "「実行 ID は 26 字です」と aria-invalid、入力で文言が消える",
+      "branches": [
+        "B18-T",
+        "B20-T",
+        "B20-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-07（関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P207-012 実行 ID が誤っていれば文言を出し、入力を直すと文言を消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-013",
+      "target": "GenerationFilters",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "「クリア」は絞り込みがあるときだけ出し、押すと絞り込みを空にする",
+      "precondition": "filters {} → { action: post }",
+      "input": "クリアを押す",
+      "expected": "{} では無く、{ action } で出て onChange({})",
+      "branches": [
+        "B21-T",
+        "B21-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-013 「クリア」は絞り込みがあるときだけ出し、押すと絞り込みを空にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-014",
+      "target": "GenerationFilters",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "エージェントの選択肢は「すべて」と各エージェントの表示名で、「すべて」を選ぶと絞り込みを外す",
+      "precondition": "エージェント 1 体",
+      "input": "エージェントを選ぶ → 「すべて」を選ぶ",
+      "expected": "選択肢は「すべて」「ミナト」。onChange({ agentId }) → onChange({ agentId: undefined })",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-014 エージェントの選択肢は「すべて」と各エージェントの表示名で、「すべて」を選ぶと絞り込みを外す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-015",
+      "target": "GenerationTable",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "参加しない（gate）の行は決め方を「参加しない」、Neurons を 0 と出し、LLM の行は小数 1 桁で出す",
+      "precondition": "なし",
+      "input": "gate の行、LLM で 15.24 の行",
+      "expected": "gate は「参加しない」と「0」、LLM は「LLM」と「15.2」",
+      "branches": [
+        "B25-T",
+        "B25-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-015 参加しない（gate）の行は決め方を「参加しない」、Neurons を 0 と出し、LLM の行は小数 1 桁で出す",
+      "result": "",
+      "note": "画面基本設計書 7章（gate も一覧に出し Neurons は 0）"
+    },
+    {
+      "id": "TC-UT_P207-016",
+      "target": "GenerationTable",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "不正な形式で失敗した行も、Neurons と試行の回数をそのまま出す",
+      "precondition": "なし",
+      "input": "failed・invalid_format、Neurons 31、試行 2",
+      "expected": "「31.0」「2」「不正な形式」「失敗（不正な形式）」",
+      "branches": [
+        "B23-T",
+        "B24-T",
+        "B25-F",
+        "B27-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-016 不正な形式で失敗した行も、Neurons と試行の回数をそのまま出す",
+      "result": "",
+      "note": "NOUS-104 で決めた「invalid_format の失敗にも Neurons を加算する」を画面でも隠さないことを確かめる（ワイヤーフレームの invalid_format 31.0・2 回）"
+    },
+    {
+      "id": "TC-UT_P207-017",
+      "target": "GenerationTable",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "失敗の行の行動は、action の値があっても「―」と出す",
+      "precondition": "なし",
+      "input": "failed・server_error で action が post",
+      "expected": "行動の列に post が出ない",
+      "branches": [
+        "B23-F",
+        "B24-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "今の GenerationTable は action ?? \"―\" のため、失敗の行でも action に値があればそのまま出す",
+      "test_name": "TC-UT_P207-017 失敗の行の行動は、action の値があっても「―」と出す",
+      "result": "",
+      "note": "画面基本設計書 H09「失敗は「―」」。サーバーが失敗で action を入れることが無ければ表には出ない。issues の疑い 1"
+    },
+    {
+      "id": "TC-UT_P207-018",
+      "target": "GenerationTable",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "失敗の種類は失敗・取り消し・中断の行だけに出し、成功の行は「―」",
+      "precondition": "なし",
+      "input": "succeeded、cancelled・stopped",
+      "expected": "成功の行に「停止」なし。取り消しの行は「停止」と「取り消し（停止）」",
+      "branches": [
+        "B24-T",
+        "B24-F",
+        "B27-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-018 失敗の種類は失敗・取り消し・中断の行だけに出し、成功の行は「―」",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-019",
+      "target": "GenerationTable",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "矛盾の候補は、あれば「あり」、なければ「―」",
+      "precondition": "なし",
+      "input": "hasConsistencyFlags true と false",
+      "expected": "「あり」と、その無い行",
+      "branches": [
+        "B26-T",
+        "B26-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-11（true の行だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P207-019 矛盾の候補は、あれば「あり」、なければ「―」",
+      "result": "",
+      "note": "画面基本設計書 H15 は「あり（N 件）」だが、一覧の API（GenerationItem）は件数を持たない。issues の確認事項 2"
+    },
+    {
+      "id": "TC-UT_P207-020",
+      "target": "formatStartedTimeJst",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "開始時刻は JST の HH:MM:SS で出し、日をまたぐと 00:00:00 になり、読めない値はそのまま出す",
+      "precondition": "なし",
+      "input": "15:00:00Z、14:59:59Z、\"x\"",
+      "expected": "00:00:00、23:59:59、x",
+      "branches": [
+        "B22-T",
+        "B22-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-020 開始時刻は JST の HH:MM:SS で出し、日をまたぐと 00:00:00 になり、読めない値はそのまま出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-021",
+      "target": "GenerationTable",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "一覧が 0 件なら「条件に一致する生成イベントはありません」を出す",
+      "precondition": "なし",
+      "input": "items []",
+      "expected": "その文言",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-021 一覧が 0 件なら「条件に一致する生成イベントはありません」を出す",
+      "result": "",
+      "note": "文言は設計書に記載なし。実装の値"
+    },
+    {
+      "id": "TC-UT_P207-022",
+      "target": "formatFailureKind",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "失敗の種類の 8 つを日本語にし、無いときは「―」にする",
+      "precondition": "なし",
+      "input": "8 種類、null、undefined",
+      "expected": "画面基本設計書 H12 の 8 つの日本語、「―」",
+      "branches": [
+        "B28-T",
+        "B28-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-10（invalid_format・cancelled だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P207-022 失敗の種類の 8 つを日本語にし、無いときは「―」にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-023",
+      "target": "StatusBadge",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "失敗でも種類が無ければ状態だけを出し、成功には種類を付けない",
+      "precondition": "なし",
+      "input": "failed＋null、succeeded＋timeout",
+      "expected": "「失敗」、「成功」（タイムアウトを付けない）",
+      "branches": [
+        "B27-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-10",
+      "suspect": "",
+      "test_name": "TC-UT_P207-023 状態のバッジは、失敗でも種類が無ければ状態だけを出し、成功には種類を付けない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-024",
+      "target": "GenerationListPage",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "URL の絞り込みをそのまま一覧の API に渡し、期間は JST で入力欄に出す（P206・P203 からの移動）",
+      "precondition": "なし",
+      "input": "/generations?agentId&action=post&status=failed&from=10-22T00:00Z&to=10-23T00:00Z",
+      "expected": "API の URL に同じ 5 項目。開始 2026-10-22T09:00、終了 2026-10-23T09:00",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B3-T",
+        "B4-T",
+        "B10-F",
+        "B11-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "一部 TC-NOUS71_DEV-11（URL を書く側だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P207-024 URL の絞り込みをそのまま一覧の API に渡し、期間は JST で入力欄に出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-025",
+      "target": "GenerationListPage",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "続きがあれば「さらに読み込む」を出し、押すと cursor を付けて取得して末尾に足し、続きが無くなれば消す（E05）",
+      "precondition": "1 ページ目 nextCursor=cursor-1、2 ページ目 null",
+      "input": "「さらに読み込む」を押す",
+      "expected": "2 件目が足され 1 件目も残る。最後の取得は ?cursor=cursor-1。ボタンが消える",
+      "branches": [
+        "B5-T",
+        "B5-F",
+        "B8-T",
+        "B8-F",
+        "B9-T",
+        "B9-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）（呼ばれた順にページを返す）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-025 続きがあれば「さらに読み込む」を出し、押すと cursor を付けて取得して末尾に足し、続きが無くなれば消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-026",
+      "target": "GenerationListPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "一覧の取得が 500 なら「生成ログを取得できませんでした」をポップアップで出す（様式①）",
+      "precondition": "一覧の API が 500",
+      "input": "/generations",
+      "expected": "「生成ログを取得できませんでした。時間をおいて再度お試しください」",
+      "branches": [
+        "B6-T",
+        "B7-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-026 一覧の取得が 500 なら「生成ログを取得できませんでした」をポップアップで出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-027",
+      "target": "GenerationListPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "一覧の取得が 401 ならセッション切れのポップアップを出す",
+      "precondition": "一覧の API が 401",
+      "input": "/generations",
+      "expected": "セッション切れの文言。生成ログの文言は出さない",
+      "branches": [
+        "B6-T",
+        "B7-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-027 一覧の取得が 401 ならセッション切れのポップアップを出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-028",
+      "target": "GenerationListPage",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "一覧の画面で正しい実行 ID を入れて Enter を押すと、P208 を開く（E03）",
+      "precondition": "一覧 0 件",
+      "input": "実行 ID を入力して Enter",
+      "expected": "/generations/{id} へ",
+      "branches": [
+        "B18-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "一部 TC-NOUS71_DEV-07（関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P207-028 一覧の画面で正しい実行 ID を入れて検索すると、P208 を開く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P207-029",
+      "target": "GenerationListPage",
+      "category": "異常系",
+      "technique": "依存",
+      "viewpoint": "エージェントの選択肢の取得に失敗しても、一覧と「すべて」だけの選択肢を出す",
+      "precondition": "エージェントの API が 500",
+      "input": "/generations",
+      "expected": "一覧は出る。選択肢は「すべて」だけ",
+      "branches": [
+        "B6-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P207-029 エージェントの選択肢の取得に失敗しても、一覧と「すべて」だけの選択肢を出す",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（選択肢の失敗は知らせない）。issues の確認事項 5"
+    }
+  ],
+  "issues": [
+    "疑い 1：画面基本設計書 H09 は失敗の行の行動を「―」と定めているが、GenerationTable は action ?? \"―\" のため、失敗の行でも action に値があればそのまま出す（TC-UT_P207-017）。サーバーが失敗の生成イベントに action を入れなければ表には現れないので、影響は小さいと考える。",
+    "確認事項 2：画面基本設計書 H15 は「あり（N 件）」だが、一覧の API の GenerationItem は hasConsistencyFlags（真偽）だけで件数を持たない。今は「あり」とだけ出す（TC-UT_P207-019）。件数を出すなら API の変更が要る。",
+    "確認事項 3：実行 ID は設計書 6章の正規表現（Crockford Base32 の英大文字）で検査するため、英小文字で貼ると「実行 ID は 26 字です」になる（TC-UT_P207-009）。ULID は大小を区別しないので、大文字に直してから検査するかを確認したい。",
+    "確認事項 4：TC-NOUS71_DEV-11 は findByText(\"ミナト\") を使うが、エージェントの選択肢（option）にも「ミナト」があるため、複数の要素に当たって失敗する可能性がある。DEV のテストは直さず、実施のときに結果を見る。UT では表のセル（role=cell）で探している。",
+    "確認事項 5：エージェントの選択肢の取得（GET /admin/api/agents）が失敗しても何も知らせず、選択肢が「すべて」だけになる（TC-UT_P207-029）。"
+  ]
+}

@@ -1,0 +1,919 @@
+{
+  "title": "P206 利用量・運用指標（MetricsPage・pages/metrics）",
+  "ticket": "NOUS-107",
+  "author": "Takaya Ishikawa（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/admin/src/pages/MetricsPage.tsx",
+    "apps/admin/src/pages/metrics/DateRangePicker.tsx",
+    "apps/admin/src/pages/metrics/TodaySummary.tsx",
+    "apps/admin/src/pages/metrics/UsageChart.tsx",
+    "apps/admin/src/pages/metrics/ActivityChart.tsx",
+    "apps/admin/src/pages/metrics/MetricsTable.tsx"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: jsdom、Testing Library）",
+  "test_files": [
+    "apps/admin/src/pages/metrics/metrics.test.tsx（実装時、NOUS-71）",
+    "apps/admin/src/pages/metrics/metrics.ut.test.tsx（単体テストで追加）"
+  ],
+  "dependencies": [
+    "管理 API（fetch。mockFetch で差し替える）",
+    "時計（Date。今日の日付と 30 秒ごとの取り直しは vi.useFakeTimers で固定する）",
+    "Recharts（jsdom では描画されないため、props を写す部品に差し替える）",
+    "TanStack Query（renderApp の QueryClient。再取得は refetchQueries で起こす）"
+  ],
+  "design_refs": [
+    "FE 詳細設計 admin_agents_logs 2〜6章",
+    "画面基本設計書 P206 v1.2 4〜7章"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "range.to === todayUtcDate()（30 秒ごとに取り直す）",
+      "location": "MetricsPage.tsx:27・31"
+    },
+    {
+      "id": "B2",
+      "condition": "query.isSuccess",
+      "location": "MetricsPage.tsx:46"
+    },
+    {
+      "id": "B3",
+      "condition": "failures.current >= 3（成功したら上部の表示を消す）",
+      "location": "MetricsPage.tsx:47"
+    },
+    {
+      "id": "B4",
+      "condition": "query.isError && query.error",
+      "location": "MetricsPage.tsx:52"
+    },
+    {
+      "id": "B5",
+      "condition": "ApiError かつ status === 401",
+      "location": "MetricsPage.tsx:53"
+    },
+    {
+      "id": "B6",
+      "condition": "hadSuccess.current（一度成功した後の失敗）",
+      "location": "MetricsPage.tsx:57"
+    },
+    {
+      "id": "B7",
+      "condition": "failures.current === 3（上部の表示を出す）",
+      "location": "MetricsPage.tsx:59"
+    },
+    {
+      "id": "B8",
+      "condition": "ApiError で status >= 500、または NetworkError",
+      "location": "MetricsPage.tsx:61"
+    },
+    {
+      "id": "B9",
+      "condition": "paramFrom && paramTo && !validateRange（URL の期間を使う）",
+      "location": "MetricsPage.tsx:90"
+    },
+    {
+      "id": "B10",
+      "condition": "items.find(今日) ?? items の末尾 ?? null",
+      "location": "MetricsPage.tsx:99"
+    },
+    {
+      "id": "B11",
+      "condition": "!from || !to（validateRange が判定しない）",
+      "location": "DateRangePicker.tsx:21"
+    },
+    {
+      "id": "B12",
+      "condition": "Number.isNaN(fromMs) || Number.isNaN(toMs)",
+      "location": "DateRangePicker.tsx:24"
+    },
+    {
+      "id": "B13",
+      "condition": "from > to",
+      "location": "DateRangePicker.tsx:25"
+    },
+    {
+      "id": "B14",
+      "condition": "days > 90",
+      "location": "DateRangePicker.tsx:27"
+    },
+    {
+      "id": "B15",
+      "condition": "!err && nextFrom && nextTo（期間を変える）",
+      "location": "DateRangePicker.tsx:65"
+    },
+    {
+      "id": "B16",
+      "condition": "today ?（今日の値がある）",
+      "location": "TodaySummary.tsx:11-12"
+    },
+    {
+      "id": "B17",
+      "condition": "limit !== undefined（日次上限の横線）",
+      "location": "UsageChart.tsx:55"
+    },
+    {
+      "id": "B18",
+      "condition": "d.replyRate === null",
+      "location": "ActivityChart.tsx:14"
+    },
+    {
+      "id": "B19",
+      "condition": "rate === null（formatRate）",
+      "location": "MetricsTable.tsx:11"
+    },
+    {
+      "id": "B20",
+      "condition": "errorRate !== null && errorRate > 0.05（赤）",
+      "location": "MetricsTable.tsx:69"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS71_DEV-01",
+      "target": "validateRange",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "開始が終了より後ならエラー、91 日以上ならエラー、90 日以内・同じ日なら null",
+      "precondition": "なし",
+      "input": "10-21〜10-20、07-01〜09-29、07-01〜09-28、10-20〜10-20",
+      "expected": "文言 2 種と null",
+      "branches": [
+        "B11-F",
+        "B12-F",
+        "B13-T",
+        "B13-F",
+        "B14-T",
+        "B14-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-01 validateRange：開始が終了より後ならエラー、91 日以上ならエラー、90 日以内なら null",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-02",
+      "target": "presetRange",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "7・14・30 日の期間を UTC の日付で返す",
+      "precondition": "なし",
+      "input": "now 2026-10-20T05:00Z",
+      "expected": "to は 10-20、from は 10-14・10-07・09-21",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-02 presetRange：7・14・30 日の期間を UTC の日付で返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-03",
+      "target": "formatRate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "null は「―」、数値は百分率の小数 1 桁",
+      "precondition": "なし",
+      "input": "null、0、0.6234、0.0115",
+      "expected": "―、0.0%、62.3%、1.1%",
+      "branches": [
+        "B19-T",
+        "B19-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-03 formatRate：null は「―」、数値は百分率の小数 1 桁にする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-04",
+      "target": "openFailedLogs",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "利用日の 00:00Z から翌日の 00:00Z までの失敗ログの URL へ遷移する",
+      "precondition": "なし",
+      "input": "2026-10-20",
+      "expected": "/generations?status=failed&from=…10-20T00:00Z&to=…10-21T00:00Z",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-04 openFailedLogs：利用日の 00:00Z から翌日の 00:00Z までの失敗ログ URL へ遷移する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-05",
+      "target": "MetricsPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "今日の要約・グラフ・日別の表を描画し、エラー率 5% 超を赤で表示する",
+      "precondition": "指標 2 日分（エラー率 1.15% と 7.69%）",
+      "input": "/metrics?from=2026-10-20&to=2026-10-21",
+      "expected": "表の 2 行、概算費用 0 円、2 つのグラフ、7.7% だけ赤",
+      "branches": [
+        "B2-T",
+        "B9-T",
+        "B10-T",
+        "B16-T",
+        "B17-T",
+        "B18-F",
+        "B20-T",
+        "B20-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-05 MetricsPage：今日の要約・グラフ・日別の表を描画し、エラー率 5% 超を赤で表示する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS71_DEV-06",
+      "target": "MetricsPage",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "エラー率のクリックで P207 に status=failed と期間を付けて遷移する",
+      "precondition": "指標 2 日分",
+      "input": "7.7% を押す",
+      "expected": "/generations?status=failed&from=10-21T00:00Z&to=10-22T00:00Z",
+      "branches": [
+        "B2-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "実装時のテスト（NOUS-71）",
+      "suspect": "",
+      "test_name": "TC-NOUS71_DEV-06 MetricsPage：エラー率のクリックで P207 に status=failed と期間を付けて遷移する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-001",
+      "target": "validateRange",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "開始か終了が空なら null を返す（判定しない）",
+      "precondition": "なし",
+      "input": "(\"\", 10-20)、(10-20, \"\")",
+      "expected": "null",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-001 validateRange は開始か終了が空なら null を返す",
+      "result": "",
+      "note": "画面基本設計書 6章は「必須」とするが、空のときの文言は定めていない。issues の確認事項 3"
+    },
+    {
+      "id": "TC-UT_P206-002",
+      "target": "validateRange",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "日付として読めない値なら null を返す",
+      "precondition": "なし",
+      "input": "(\"2026-13-40\", 10-20)",
+      "expected": "null",
+      "branches": [
+        "B11-F",
+        "B12-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-002 validateRange は日付として読めない値なら null を返す",
+      "result": "",
+      "note": "type=date の入力欄からは来ない値。URL の検索パラメータから来うる"
+    },
+    {
+      "id": "TC-UT_P206-003",
+      "target": "presetRange",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "うるう日をまたいでも日数どおりの開始日を返す",
+      "precondition": "なし",
+      "input": "days 7、now 2028-03-01T00:00Z",
+      "expected": "{ from: 2028-02-24, to: 2028-03-01 }",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-02（月をまたぐだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P206-003 presetRange はうるう日をまたいでも日数どおりの開始日を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-004",
+      "target": "todayUtcDate / presetRange",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "今日の日付は UTC で決まり、00:00:00.000Z（日本時間 9:00）で切り替わる",
+      "precondition": "なし",
+      "input": "2026-10-20T23:59:59.999Z、2026-10-21T00:00:00.000Z",
+      "expected": "10-20、10-21。presetRange の to も 10-20",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-004 今日の日付は UTC で決まり、00:00:00.000Z（日本時間 9:00）で切り替わる",
+      "result": "",
+      "note": "README 6.2 の 00:00 UTC の両側の境界値"
+    },
+    {
+      "id": "TC-UT_P206-005",
+      "target": "formatRate",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "0.05 は 5.0%、1 は 100.0%、0.05% 未満は 0.0% に丸める",
+      "precondition": "なし",
+      "input": "0.05、1、0.00049",
+      "expected": "5.0%、100.0%、0.0%",
+      "branches": [
+        "B19-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-03",
+      "suspect": "",
+      "test_name": "TC-UT_P206-005 formatRate は 0.05 を 5.0%、1 を 100.0% にし、0.05% 未満は 0.0% に丸める",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-006",
+      "target": "buildFailedLogsPath",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "月末の利用日の失敗ログの URL は、翌月 1 日の 00:00Z までにする",
+      "precondition": "なし",
+      "input": "2026-10-31",
+      "expected": "from 2026-10-31T00:00Z、to 2026-11-01T00:00Z",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-04（月の途中だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P206-006 月末の利用日の失敗ログの URL は、翌月 1 日の 00:00Z までにする",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-007",
+      "target": "MetricsTable",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "エラー率がちょうど 5% なら赤にせず、5% を超えると赤にする",
+      "precondition": "なし",
+      "input": "エラー率 0.05 と 0.051",
+      "expected": "5.0% は通常の色、5.1% は赤",
+      "branches": [
+        "B19-F",
+        "B20-T",
+        "B20-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-05（1.15% と 7.69% だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P206-007 エラー率がちょうど 5% なら赤にせず、5% を超えると赤にする",
+      "result": "",
+      "note": "色は見た目だが、「5% を超えると赤」は画面基本設計書 H13 の業務の規則なので、DEV-05 と同じく style で確かめる"
+    },
+    {
+      "id": "TC-UT_P206-008",
+      "target": "MetricsTable",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "エラー率が null（実行 0 回）の日は「―」で、赤にせず、押せば P207 へ移る",
+      "precondition": "なし",
+      "input": "errorRate null、runs 0",
+      "expected": "ボタンは「―」で通常の色。押すと onErrorRateClick(利用日)",
+      "branches": [
+        "B19-T",
+        "B20-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-008 エラー率が null（実行 0 回）の日は「―」で、赤にしない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-009",
+      "target": "MetricsTable",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "日別の表は、トークンを 3 桁区切り、Neurons を小数 1 桁、概算費用を 0 円で出す",
+      "precondition": "なし",
+      "input": "入力 380000、出力 18000、Neurons 1234",
+      "expected": "380,000、18,000、1,234.0、0 円",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-009 日別の表は、トークンを 3 桁区切り、Neurons を小数 1 桁、概算費用を 0 円で出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-010",
+      "target": "MetricsTable",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "日別の表は 0 件なら「この期間のデータはありません」を出す",
+      "precondition": "なし",
+      "input": "items []",
+      "expected": "「この期間のデータはありません」",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-010 日別の表は 0 件なら「この期間のデータはありません」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-011",
+      "target": "TodaySummary",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "今日の値が無ければ 0 / 無料枠・0 回・0 円を出す",
+      "precondition": "なし",
+      "input": "today null",
+      "expected": "「0 / 10,000」「0 回」「0 円」",
+      "branches": [
+        "B16-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-011 今日の要約は、今日の値が無ければ 0 / 無料枠・0 回・0 円を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-012",
+      "target": "TodaySummary",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "Neurons を小数 1 桁まで、呼び出しを 3 桁区切りで出し、渡された無料枠を使う",
+      "precondition": "なし",
+      "input": "neurons 2104.56、calls 1234、freeTier 12000",
+      "expected": "「2,104.6 / 12,000」「1,234 回」",
+      "branches": [
+        "B16-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-012 今日の要約は、Neurons を小数 1 桁まで、呼び出しを 3 桁区切りで出し、無料枠の値を使う",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-013",
+      "target": "MetricsPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "期間の途中の日が今日なら、末尾の日ではなくその日の値を今日の要約に出す",
+      "precondition": "今日 2026-10-20。指標 10-19・10-20・10-21",
+      "input": "/metrics?from=2026-10-19&to=2026-10-21",
+      "expected": "今日の Neurons「2,104.5 / 10,000」、呼び出し「132 回」",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B9-T",
+        "B10-T",
+        "B16-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）、vi.useFakeTimers（shouldAdvanceTime、now を固定）",
+      "dev_ref": "一部 TC-NOUS71_DEV-05（今日の値を見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_P206-013 MetricsPage は、期間の途中の日が今日なら、その日の値を今日の要約に出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-014",
+      "target": "MetricsPage",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "期間に今日が含まれなければ、今日の要約を 0 にする",
+      "precondition": "今日 2026-10-22。指標 10-20・10-21",
+      "input": "/metrics?from=2026-10-20&to=2026-10-21",
+      "expected": "今日の Neurons「0 / 10,000」、呼び出し「0 回」",
+      "branches": [
+        "B2-T",
+        "B10-F",
+        "B16-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）、vi.useFakeTimers（shouldAdvanceTime、now を固定）",
+      "dev_ref": "なし",
+      "suspect": "今の MetricsPage は期間の最後の日（10-21）の値を「今日の Neurons」に出す（NOUS-71 で Jane Doe さんが確認を求めたまま未決）",
+      "test_name": "TC-UT_P206-014 MetricsPage は、期間に今日が含まれなければ、今日の要約を 0 にする",
+      "result": "",
+      "note": "画面基本設計書 H04・H05 は「今日の」値（daily_usage の今日の行）。issues の疑い 1"
+    },
+    {
+      "id": "TC-UT_P206-015",
+      "target": "MetricsPage",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "期間に今日が含まれても今日の行が無ければ、前の日の値を出さず 0 にする",
+      "precondition": "今日 2026-10-21。指標は 10-20 だけ（今日はまだ利用なし）",
+      "input": "/metrics?from=2026-10-20&to=2026-10-21",
+      "expected": "今日の Neurons「0 / 10,000」",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B10-F",
+        "B16-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）、vi.useFakeTimers（shouldAdvanceTime、now を固定）",
+      "dev_ref": "なし",
+      "suspect": "今の MetricsPage は末尾の 10-20（昨日）の値を「今日の Neurons」に出す",
+      "test_name": "TC-UT_P206-015 MetricsPage は、期間に今日が含まれても今日の行が無ければ、前の日の値を出さず 0 にする",
+      "result": "",
+      "note": "issues の疑い 1"
+    },
+    {
+      "id": "TC-UT_P206-016",
+      "target": "MetricsPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "URL に期間が無ければ今日までの 14 日で取得する（E01）",
+      "precondition": "今日 2026-10-21",
+      "input": "/metrics",
+      "expected": "最初の取得が /admin/api/metrics/daily?from=2026-10-08&to=2026-10-21",
+      "branches": [
+        "B9-F",
+        "B1-T",
+        "B4-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）、vi.useFakeTimers（shouldAdvanceTime、now を固定）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-016 MetricsPage は、URL に期間が無ければ今日までの 14 日で取得する",
+      "result": "",
+      "note": "取得の完了を待つ間は成功でも失敗でもないので、B4 の偽も通る"
+    },
+    {
+      "id": "TC-UT_P206-017",
+      "target": "MetricsPage",
+      "category": "異常系",
+      "technique": "同値分割",
+      "viewpoint": "URL の期間が誤っていれば（開始が終了より後）既定の 14 日で取得する",
+      "precondition": "今日 2026-10-21",
+      "input": "/metrics?from=2026-10-21&to=2026-10-20",
+      "expected": "最初の取得が from=2026-10-08&to=2026-10-21",
+      "branches": [
+        "B9-F",
+        "B13-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）、vi.useFakeTimers（shouldAdvanceTime、now を固定）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-017 MetricsPage は、URL の期間が誤っていれば（開始が終了より後）既定の 14 日で取得する",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（URL の誤りは文言を出さず既定に戻す）"
+    },
+    {
+      "id": "TC-UT_P206-018",
+      "target": "DateRangePicker",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "期間の開始を終了より後にすると、入力欄の下に文言を出し（様式④）、期間を変えない",
+      "precondition": "from 10-20、to 10-21",
+      "input": "開始を 10-22 に変える",
+      "expected": "「開始日は終了日より前にしてください」、aria-invalid=true、onChange を呼ばない",
+      "branches": [
+        "B13-T",
+        "B15-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-01（関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P206-018 期間の開始を終了より後にすると、入力欄の下に文言を出し、期間を変えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-019",
+      "target": "DateRangePicker",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "期間が 91 日なら文言を出して期間を変えず、90 日なら期間を変える",
+      "precondition": "from 10-01、to 10-20",
+      "input": "開始を 07-22（91 日）、次に 07-23（90 日）",
+      "expected": "91 日は「期間は 90 日以内にしてください」で onChange なし。90 日は文言が消え onChange({07-23, 10-20})",
+      "branches": [
+        "B14-T",
+        "B14-F",
+        "B15-T",
+        "B15-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS71_DEV-01（関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P206-019 期間が 91 日なら文言を出して期間を変えず、90 日なら期間を変える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-020",
+      "target": "DateRangePicker",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "期間の開始を空にしたときは、文言を出さず、期間も変えない",
+      "precondition": "from 10-20、to 10-21",
+      "input": "開始を空にする",
+      "expected": "文言なし、onChange を呼ばない",
+      "branches": [
+        "B11-T",
+        "B15-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-020 期間の開始を空にしたときは、文言を出さず、期間も変えない",
+      "result": "",
+      "note": "issues の確認事項 3（必須の文言が定まっていない）"
+    },
+    {
+      "id": "TC-UT_P206-021",
+      "target": "DateRangePicker",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "「直近 7 日」を押すと、UTC の今日までの 7 日に変える（E03）",
+      "precondition": "今日 2026-10-21",
+      "input": "「直近 7 日」を押す",
+      "expected": "onChange({ from: 10-15, to: 10-21 })",
+      "branches": [
+        "B15-T"
+      ],
+      "mock": "vi.useFakeTimers（shouldAdvanceTime、now を固定）",
+      "dev_ref": "一部 TC-NOUS71_DEV-02（関数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P206-021 「直近 7 日」を押すと、UTC の今日までの 7 日に変える",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-022",
+      "target": "DateRangePicker",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "外から渡された期間が変わると入力を合わせ、誤りがあれば文言を出す",
+      "precondition": "from 10-20、to 10-21",
+      "input": "from 10-22、to 10-21 で描画し直す",
+      "expected": "開始の入力が 10-22、「開始日は終了日より前にしてください」",
+      "branches": [
+        "B13-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-022 外から渡された期間が変わると入力を合わせ、誤りがあれば文言を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-023",
+      "target": "DateRangePicker",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "日付が UTC の利用日であることを「日本時間 9:00 に切り替わります」と添える",
+      "precondition": "なし",
+      "input": "描画",
+      "expected": "「日本時間 9:00 に切り替わります」",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-023 日付が UTC の利用日であることを「日本時間 9:00 に切り替わります」と添える",
+      "result": "",
+      "note": "画面基本設計書 7章"
+    },
+    {
+      "id": "TC-UT_P206-024",
+      "target": "UsageChart",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "日別の Neurons の棒と、無料枠・日次上限の横線を引く",
+      "precondition": "なし",
+      "input": "Neurons 4210.5、freeTier 10000、limit 9500",
+      "expected": "横線は y=10000「無料枠 10,000」と y=9500「日次上限 9,500」。棒のデータは日付と Neurons。縦軸は 0〜10000",
+      "branches": [
+        "B17-T"
+      ],
+      "mock": "Recharts を props を data 属性に写す部品に差し替え（jsdom では寸法が 0 で描画されないため）",
+      "dev_ref": "一部 TC-NOUS71_DEV-05（グラフの領域があることだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_P206-024 利用量のグラフは、日別の Neurons の棒と、無料枠・日次上限の横線を引く",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-025",
+      "target": "UsageChart",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "日次上限が無ければ横線は無料枠だけで、上限が無料枠より大きければ縦軸を上限まで取る",
+      "precondition": "なし",
+      "input": "limit なし / limit 12000",
+      "expected": "横線 1 本 / 縦軸 0〜12000",
+      "branches": [
+        "B17-F",
+        "B17-T"
+      ],
+      "mock": "Recharts を props を data 属性に写す部品に差し替え（jsdom では寸法が 0 で描画されないため）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-025 日次上限が無ければ横線は無料枠だけで、上限が無料枠より大きければ縦軸を上限まで取る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-026",
+      "target": "ActivityChart",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "投稿数の棒と、応答率を百分率の小数 1 桁にした線にし、null はそのまま渡す。目標の線は引かない",
+      "precondition": "なし",
+      "input": "replyRate 0.6234 と null",
+      "expected": "replyRatePercent 62.3 と null。横線なし",
+      "branches": [
+        "B18-T",
+        "B18-F"
+      ],
+      "mock": "Recharts を props を data 属性に写す部品に差し替え（jsdom では寸法が 0 で描画されないため）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-026 活発さのグラフは投稿数の棒と、応答率を百分率の小数 1 桁にした線（null はそのまま）にする",
+      "result": "",
+      "note": "目標の線を引かないのは画面基本設計書 7章（Q-606）"
+    },
+    {
+      "id": "TC-UT_P206-027",
+      "target": "MetricsPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "最初の取得が 500 なら「指標を取得できませんでした」をポップアップで出す（様式①）",
+      "precondition": "指標の API が 500",
+      "input": "/metrics?from=2026-10-20&to=2026-10-21",
+      "expected": "ErrorModal に「指標を取得できませんでした。時間をおいて再度お試しください」",
+      "branches": [
+        "B2-F",
+        "B4-T",
+        "B5-F",
+        "B6-F",
+        "B8-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-027 最初の取得が 500 なら「指標を取得できませんでした」をポップアップで出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-028",
+      "target": "MetricsPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "最初の取得が通信エラーでも「指標を取得できませんでした」をポップアップで出す",
+      "precondition": "指標の fetch が TypeError を投げる",
+      "input": "/metrics?from=2026-10-20&to=2026-10-21",
+      "expected": "同じ文言のポップアップ",
+      "branches": [
+        "B4-T",
+        "B6-F",
+        "B8-T"
+      ],
+      "mock": "fetch を差し替え、指標だけ例外を投げる",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-028 最初の取得が通信エラーでも「指標を取得できませんでした」をポップアップで出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-029",
+      "target": "MetricsPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "取得が 401 ならセッション切れのポップアップを出し、指標のポップアップは出さない",
+      "precondition": "指標の API が 401 ADMIN_UNAUTHORIZED",
+      "input": "/metrics?from=2026-10-20&to=2026-10-21",
+      "expected": "「ログインの有効期限が切れました。もう一度ログインしてください」",
+      "branches": [
+        "B4-T",
+        "B5-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-029 取得が 401 ならセッション切れのポップアップを出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-030",
+      "target": "MetricsPage",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "成功の後の再取得が 2 回続けて失敗しても上部の表示は出さず、3 回目で「最新の指標を取得できていません」を出す（様式②）",
+      "precondition": "最初は成功、その後 500",
+      "input": "queryClient.refetchQueries で 3 回取り直す",
+      "expected": "2 回目までは表示なし、3 回目で ErrorBanner。ポップアップは出さない",
+      "branches": [
+        "B2-T",
+        "B4-T",
+        "B5-F",
+        "B6-T",
+        "B7-T",
+        "B7-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）（途中で応答を替える）。再取得は 30 秒の時計を待たず refetchQueries で起こす",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-030 成功の後の再取得が 2 回続けて失敗しても上部の表示は出さず、3 回目で「最新の指標を取得できていません」を出す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-031",
+      "target": "MetricsPage",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "上部の表示を出した後に再取得が成功すると、表示を消す",
+      "precondition": "成功 → 500 × 3 → 成功",
+      "input": "refetchQueries で 4 回取り直す",
+      "expected": "「最新の指標を取得できていません」が消える",
+      "branches": [
+        "B2-T",
+        "B3-T",
+        "B7-T"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）（途中で応答を替える）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-031 上部の表示を出した後に再取得が成功すると、表示を消す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_P206-033",
+      "target": "MetricsPage",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "取得が 400 なら、サーバーの文言を期間の入力欄の下に出し（E02 の様式④）、指標のポップアップは出さない",
+      "precondition": "指標の API が 400 VALIDATION_ERROR（message「期間の指定が正しくありません」）",
+      "input": "/metrics?from=2026-10-20&to=2026-10-21",
+      "expected": "「期間の指定が正しくありません」を出す。「指標を取得できませんでした」は出さない",
+      "branches": [
+        "B4-T",
+        "B5-F",
+        "B6-F",
+        "B8-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）",
+      "dev_ref": "なし",
+      "suspect": "今の useMetrics は 400 を useApiErrorHandler に渡すだけで、戻り値（項目のエラー）を使わないため、文言がどこにも出ない",
+      "test_name": "TC-UT_P206-033 取得が 400 なら、サーバーの文言を期間の入力欄の下に出し、指標のポップアップは出さない",
+      "result": "",
+      "note": "画面基本設計書 P206 E02「様式④: 400 の文言」。issues の疑い 2"
+    },
+    {
+      "id": "TC-UT_P206-032",
+      "target": "MetricsPage",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "期間の終了が今日なら 30 秒ごとに取り直し、今日でなければ取り直さない（E04）",
+      "precondition": "今日 2026-10-21",
+      "input": "to=10-21 と to=10-20 のそれぞれで、時計を 30 秒進める",
+      "expected": "今日のときは取得が増え、今日でないときは増えない",
+      "branches": [
+        "B1-T",
+        "B1-F",
+        "B3-F"
+      ],
+      "mock": "fetch を mockFetch で差し替え（session・world は成功）、vi.useFakeTimers（shouldAdvanceTime、now を固定）（advanceTimersByTimeAsync で 30 秒進める）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_P206-032 期間の終了が今日なら 30 秒ごとに取り直し、今日でなければ取り直さない",
+      "result": "",
+      "note": ""
+    }
+  ],
+  "issues": [
+    "疑い 1：今日の要約（H04・H05）は、MetricsPage が期間の中に今日の行が無いとき、期間の最後の日の値を出す（TC-UT_P206-014・015）。期間に今日が含まれない場合と、今日の利用がまだ無い場合（今日の行が無い）の両方で、前の日の値が「今日の Neurons」に出る。画面基本設計書は「今日の」値と定めているため、0 を出すのが仕様と考えて期待結果を書いた。NOUS-71 で Jane Doe さんが確認を求めたまま決まっていないので、Kouhei Tajima の判断を仰ぐ。",
+    "疑い 2：画面基本設計書 P206 E02 は 400 を様式④（入力欄の下に文言）と定めているが、useMetrics は 400 を useApiErrorHandler に渡すだけで、戻り値の項目のエラーを画面に出さない。そのため 400 の文言がどこにも出ない（TC-UT_P206-033）。画面の検証を通った期間だけを送るので、起きるのはサーバー側の検証が画面と食い違ったときに限られる。",
+    "確認事項 3：期間（H01・H02）は画面基本設計書 6章で必須だが、空にしたときの文言が定められていない。今は文言を出さず、期間も変えない（TC-UT_P206-020）。",
+    "確認事項 4：エラー率 5% 超の赤は色でしか表れないため、テストは style の色で確かめている（DEV-05・TC-UT_P206-007）。data 属性などで状態を持たせると、見た目に頼らずに確かめられる。今回の範囲ではプロダクトのコードを変えないので提案に留める。"
+  ]
+}
