@@ -54,4 +54,5 @@
 
 ## 3. 確認事項・バグの疑い
 
-- 疑い 1：不正な形式の試行は LLM が応答しており Neurons を消費しているが、トークン・Neurons を 0 で記録している。daily_usage.neurons が実際の消費より少なくなり、日次上限の判定が甘くなる。recordAttempt は result が ok 以外のときトークン・Neurons を 0 にする。設計書 4章の recordAttempt は「addDailyUsage（calls+1、runs…、トークン、Neurons）」で ok に限っておらず、P207 のワイヤーフレームも invalid_format の失敗に Neurons 31.0 を出している。TC-UT_USG-012 は設計どおりの期待結果で書いた（実施で NG になる見込み）。TC-NOUS63_DEV-02 は 0 を期待しており、疑いと食い違う
+- 疑い 1：不正な形式の試行は LLM が応答しており Neurons を消費しているが、トークン・Neurons を 0 で記録している。daily_usage.neurons が実際の消費より少なくなり、日次上限の判定が甘くなる。recordAttempt は result が ok 以外のときトークン・Neurons を 0 にする。不正な形式の試行のトークン・Neurons は加算するのが仕様（2026-10-26 Kouhei Tajima の決定）。TC-UT_USG-012 は仕様の期待結果で書いた（実施で NG の見込み）。TC-NOUS63_DEV-02 は 0 を期待しており、仕様と食い違う
+- 分岐 B7 の偽（6 通りのどれにも当たらない）は通せない。引数の型が ActionKind | 'none' の 6 値で、switch がすべてを返すため、型の上では到達しない（default が無いので、型を外した値なら undefined を返す）

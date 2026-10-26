@@ -136,9 +136,10 @@
     }
   ],
   "issues": [
-    "確認事項 1：runs の上限ちょうど。この生成イベントの最初の試行で daily_usage.runs が上限に達すると、待ちの後の上限の確認で StoppedError になり、上限の中で始めた最後の 1 回が再試行できない（TC-NOUS63_DEV-12 がこの動きを期待している）。runs は「LLM を呼んだ生成イベントの数」なので、同じイベントの再試行は runs の上限で止めない方が設計の意図に近いと考える。仕様の確認を求める",
-    "確認事項 2：呼び出しが成功した直後に signal が abort されると、試行を記録せずに CancelledError になる（TC-UT_RTY-019）。消費した Neurons が daily_usage に入らない。緊急停止のときだけで影響は小さい。設計書に記載がないため、テストは実装の値で書いた",
-    "確認事項 3：TC-NOUS63_DEV-09・10・12、TC-NOUS83_DEV-04 は、callWithRetry を呼んだ直後に clock.advance するため、sleep が張られる前に時刻が進む可能性がある（FakeClock.advance は呼んだ時点のタイマーだけを解決する）。実施のときに落ちたら、テストの書き方の問題として切り分ける。UT ではタイマーが張られるのを待ってから進めている",
+    "疑い 2：再試行は runs の上限では止めず、Neurons の上限だけで止めるのが仕様（2026-10-26 Kouhei Tajima の決定）。実装は待ちの後の上限の確認に isWithinLimits（Neurons と runs の両方）を使うため、この生成イベントの最初の試行で daily_usage.runs が上限に達すると StoppedError になり、上限の中で始めた最後の 1 回が再試行できない。TC-UT_RTY-024 は仕様の期待結果で書いた（実施で NG の見込み）。TC-NOUS63_DEV-12 の後半は runs の上限で StoppedError を期待しており、仕様と食い違う",
+    "疑い 4：呼び出しが成功した直後に緊急停止（signal の abort）されても、その試行は記録するのが仕様（2026-10-26 Kouhei Tajima の決定）。実装は試行を記録せずに CancelledError を投げるため、消費した Neurons が daily_usage に入らない。TC-UT_RTY-019 は仕様の期待結果（result=cancelled、トークン・Neurons 付きで記録）で書いた。result を cancelled とするか ok とするかは設計書に記載がなく、検証の前に取り消されるため cancelled とした（確認事項 1）",
+    "実施の手がかり：TC-NOUS63_DEV-09・10・12、TC-NOUS83_DEV-04 は、callWithRetry を呼んだ直後に clock.advance するため、sleep が張られる前に時刻が進む可能性がある（FakeClock.advance は呼んだ時点のタイマーだけを解決する）。実施のときに落ちたら、まずテストの書き方の問題として切り分ける。UT ではタイマーが張られるのを待ってから進めている",
+    "確認事項 1：緊急停止の直後の試行の result（cancelled か ok か）。TC-UT_RTY-019 は cancelled で書いた",
     "分岐 B12 の真（startAttemptNo が 5 以上）は TC-NOUS63_DEV-13 で通る。opportunityRunner からは 5 以上で呼ばれることはない"
   ],
   "cases": [
@@ -210,7 +211,7 @@
       "suspect": "",
       "test_name": "TC-NOUS63_DEV-09 一時的な失敗は 30 秒・120 秒の順に待ち、3 回目で成功すれば attemptNo=3 を返す",
       "result": "",
-      "note": "確認事項 3"
+      "note": "実施の手がかり"
     },
     {
       "id": "TC-NOUS63_DEV-10",
@@ -230,7 +231,7 @@
       "suspect": "",
       "test_name": "TC-NOUS63_DEV-10 3 回目も一時的な失敗なら記録して最後の失敗種別の TemporaryFailureError を投げる",
       "result": "",
-      "note": "確認事項 3"
+      "note": "実施の手がかり"
     },
     {
       "id": "TC-NOUS63_DEV-11",
@@ -267,10 +268,10 @@
       ],
       "mock": "呼び出しの関数",
       "dev_ref": "実装時のテスト（NOUS-63）",
-      "suspect": "",
+      "suspect": "後半は runs の上限で StoppedError を期待しており、疑い 2（再試行は runs の上限では止めない）と食い違う",
       "test_name": "TC-NOUS63_DEV-12 再試行の待ちの後に shouldContinue() が false または日次上限到達なら StoppedError を投げる",
       "result": "",
-      "note": "確認事項 1・3"
+      "note": "疑い 2、実施の手がかり"
     },
     {
       "id": "TC-NOUS63_DEV-13",
@@ -391,7 +392,7 @@
       "suspect": "",
       "test_name": "TC-NOUS83_DEV-04 callWithRetry は stopSignal が渡されない場合は従来どおり再試行の待ちを完了して動作する",
       "result": "",
-      "note": "確認事項 3"
+      "note": "実施の手がかり"
     },
     {
       "id": "TC-NOUS83_DEV-05",
@@ -675,9 +676,9 @@
       "target": "callWithRetry",
       "category": "異常系",
       "technique": "分岐網羅",
-      "viewpoint": "world_settings が無いときは ctx.settings の上限で判定し、上限なら StoppedError",
-      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、world_settings の無い世界、daily_usage runs=5",
-      "input": "timeout、settings={neurons 9500, runs 5}",
+      "viewpoint": "world_settings が無いときは ctx.settings の Neurons の上限で判定し、上限なら StoppedError",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、world_settings の無い世界、daily_usage neurons=100",
+      "input": "timeout、settings={neurons 100, runs 480}",
       "expected": "StoppedError",
       "branches": [
         "B10-F",
@@ -687,9 +688,9 @@
       "mock": "呼び出しの関数",
       "dev_ref": "なし",
       "suspect": "",
-      "test_name": "TC-UT_RTY-014 world_settings が無いときは ctx.settings の上限で判定し、上限に達していれば StoppedError を投げる",
+      "test_name": "TC-UT_RTY-014 world_settings が無いときは ctx.settings の Neurons の上限で判定し、上限に達していれば StoppedError を投げる",
       "result": "",
-      "note": ""
+      "note": "疑い 2 の決定により、上限の判定は Neurons で見る"
     },
     {
       "id": "TC-UT_RTY-015",
@@ -777,19 +778,19 @@
       "target": "callWithRetry",
       "category": "異常系",
       "technique": "分岐網羅",
-      "viewpoint": "呼び出しが成功した直後に signal が abort されていたら CancelledError、試行は記録しない",
+      "viewpoint": "呼び出しが成功した直後に signal が abort されていても、その試行をトークン・Neurons 付きで記録してから CancelledError",
       "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
-      "input": "abort してから成功を返す呼び出し",
-      "expected": "ClockCancelledError、試行 0 件",
+      "input": "abort してから成功（トークン 500・25、Neurons 5.2）を返す呼び出し",
+      "expected": "ClockCancelledError、試行 1 件（cancelled、prompt_tokens 500、Neurons 5.2）、daily_usage calls=1・runs=1・Neurons 5.2",
       "branches": [
         "B14-T"
       ],
       "mock": "呼び出しの関数",
       "dev_ref": "なし",
-      "suspect": "",
-      "test_name": "TC-UT_RTY-019 呼び出しが成功した直後に signal が abort されていたら CancelledError を投げ、試行は記録しない",
+      "suspect": "実装は試行を記録せずに CancelledError を投げる（疑い 4）",
+      "test_name": "TC-UT_RTY-019 呼び出しが成功した直後に signal が abort されていても、その試行を Neurons 付きで記録してから CancelledError を投げる",
       "result": "",
-      "note": "確認事項 2。設計書に記載なし。実装の値"
+      "note": "2026-10-26 Kouhei Tajima の決定：緊急停止の直後も試行を記録する。result は確認事項 1"
     },
     {
       "id": "TC-UT_RTY-020",
@@ -869,6 +870,26 @@
       "test_name": "TC-UT_RTY-023 isCancellation は取り消しの例外か signal の abort を取り消しと判定する",
       "result": "",
       "note": ""
+    },
+    {
+      "id": "TC-UT_RTY-024",
+      "target": "callWithRetry",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "この生成イベントの 1 回目で runs が日次上限（1）に達しても、待ちの後に再試行する（runs の上限では止めない）",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、runs 上限 1・Neurons 上限 9500 の世界",
+      "input": "timeout の後に成功",
+      "expected": "attemptNo=2、呼び出し 2 回",
+      "branches": [
+        "B21-T",
+        "B22-F"
+      ],
+      "mock": "FakeClock 2026-10-22T09:00:00.000Z、呼び出しの関数",
+      "dev_ref": "一部 TC-NOUS63_DEV-12（runs の上限で止まることを期待しており逆）",
+      "suspect": "実装は runs の上限でも StoppedError にする（疑い 2）",
+      "test_name": "TC-UT_RTY-024 この生成イベントの 1 回目で runs が日次上限に達しても、待ちの後に再試行する（runs の上限では止めない）",
+      "result": "",
+      "note": "2026-10-26 Kouhei Tajima の決定：再試行は Neurons の上限だけで止める"
     }
   ]
 }

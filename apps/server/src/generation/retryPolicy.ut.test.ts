@@ -332,15 +332,19 @@ describe("retryPolicy（単体テスト）", () => {
     expect(count).toBe(1);
   });
 
-  it("TC-UT_RTY-014 world_settings が無いときは ctx.settings の上限で判定し、上限に達していれば StoppedError を投げる", async () => {
+  it("TC-UT_RTY-014 world_settings が無いときは ctx.settings の Neurons の上限で判定し、上限に達していれば StoppedError を投げる", async () => {
     const bareWorld = seedWorld(t.db);
     const bareEvent = seedEvent(t.db, bareWorld, seedAgent(t.db, bareWorld, "haruka"));
-    t.db.insert(daily_usage).values({ usage_date: SEED_DATE, calls: 5, runs: 5, neurons: 0 }).run();
+    t.db.insert(daily_usage).values({ usage_date: SEED_DATE, calls: 5, runs: 5, neurons: 100 }).run();
     const promise = callWithRetry(
       async () => {
         throw new TimeoutError("t");
       },
-      makeCtx({ worldId: bareWorld, eventId: bareEvent, settings: { daily_neurons_limit: 9500, daily_runs_limit: 5 } }),
+      makeCtx({
+        worldId: bareWorld,
+        eventId: bareEvent,
+        settings: { daily_neurons_limit: 100, daily_runs_limit: 480 },
+      }),
     );
     const assertion = expect(promise).rejects.toBeInstanceOf(StoppedError);
     await waitForSleeps(clock);
@@ -427,7 +431,7 @@ describe("retryPolicy（単体テスト）", () => {
     expect(clock.pendingCount()).toBe(0);
   });
 
-  it("TC-UT_RTY-019 呼び出しが成功した直後に signal が abort されていたら CancelledError を投げ、試行は記録しない", async () => {
+  it("TC-UT_RTY-019 呼び出しが成功した直後に signal が abort されていても、その試行を Neurons 付きで記録してから CancelledError を投げる", async () => {
     const controller = new AbortController();
 
     const promise = callWithRetry(
@@ -439,7 +443,14 @@ describe("retryPolicy（単体テスト）", () => {
     );
 
     await expect(promise).rejects.toBeInstanceOf(ClockCancelledError);
-    expect(attemptsOf(eventId)).toHaveLength(0);
+    expect(attemptsOf(eventId)).toEqual([
+      expect.objectContaining({ attempt_no: 1, result: "cancelled", prompt_tokens: 500, neurons: 5.2 }),
+    ]);
+    expect(t.db.select().from(daily_usage).where(eq(daily_usage.usage_date, SEED_DATE)).get()).toMatchObject({
+      calls: 1,
+      runs: 1,
+      neurons: 5.2,
+    });
   });
 
   it("TC-UT_RTY-020 再試行の待ちの途中で signal が abort されたら、2 回目を呼ばずに CancelledError を投げる", async () => {
@@ -520,4 +531,24 @@ describe("retryPolicy（単体テスト）", () => {
       expect(res).toBe(expected);
     },
   );
+
+  it("TC-UT_RTY-024 この生成イベントの 1 回目で runs が日次上限に達しても、待ちの後に再試行する（runs の上限では止めない）", async () => {
+    const limitedWorld = seedRunningWorld(t.db, { settings: { daily_neurons_limit: 9500, daily_runs_limit: 1 } });
+    const limitedEvent = seedEvent(t.db, limitedWorld, seedAgent(t.db, limitedWorld, "haruka"));
+    let count = 0;
+    const promise = callWithRetry(
+      async () => {
+        count += 1;
+        if (count === 1) throw new TimeoutError("t1");
+        return OK_RESULT;
+      },
+      makeCtx({ worldId: limitedWorld, eventId: limitedEvent }),
+    );
+    await waitForSleeps(clock);
+
+    await clock.advance(30_000);
+
+    await expect(promise).resolves.toMatchObject({ attemptNo: 2 });
+    expect(count).toBe(2);
+  });
 });

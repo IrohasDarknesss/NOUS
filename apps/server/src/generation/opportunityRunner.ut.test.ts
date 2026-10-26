@@ -398,18 +398,19 @@ describe("opportunityRunner（単体テスト）", () => {
     expect(llm.requests[0]?.fixtureKey.handle).toBe("minato");
   });
 
-  it("TC-UT_RUN-016 generateAndValidate は world_settings が無いとき ctx.settings の上限で待ちの後の停止を判定する", async () => {
+  it("TC-UT_RUN-016 generateAndValidate は world_settings が無いとき ctx.settings の Neurons の上限で待ちの後の停止を判定する", async () => {
     const bareWorld = seedWorld(t.db);
     const zen = seedAgent(t.db, bareWorld, "zen");
     const eventId = seedEvent(t.db, bareWorld, zen);
+    t.db.insert(daily_usage).values({ usage_date: SEED_DATE, calls: 3, runs: 3, neurons: 100 }).run();
     const llm = scriptedLlm([new TimeoutError("t1"), makeLlmResult(NONE_JSON)]);
     const promise = generateAndValidate(eventId, PROMPT, ["post"], {
       ...makeCtx(llm, { worldId: bareWorld, agentId: zen }),
       settings: {
         model_id: "@cf/google/gemma-4-26b-a4b-it",
         max_output_tokens: 300,
-        daily_neurons_limit: 9500,
-        daily_runs_limit: 1,
+        daily_neurons_limit: 100,
+        daily_runs_limit: 480,
       },
     });
     const assertion = expect(promise).rejects.toBeInstanceOf(StoppedError);
@@ -431,7 +432,7 @@ describe("opportunityRunner（単体テスト）", () => {
     expect(usageOf(SEED_DATE)).toMatchObject({ calls: 2, runs: 1, neurons: 11 });
   });
 
-  it("TC-UT_RUN-018 1 回目が不正な形式のとき、その呼び出し中に stopSignal が abort されていても再生成を 1 回呼ぶ", async () => {
+  it("TC-UT_RUN-018 1 回目が不正な形式のとき、その呼び出し中に stopSignal が abort されていたら、再生成を呼ばずに cancelled（stopped）で閉じる", async () => {
     const stopController = new AbortController();
     const llm = scriptedLlm([
       () => {
@@ -443,8 +444,9 @@ describe("opportunityRunner（単体テスト）", () => {
 
     const res = await runOpportunity(makeCtx(llm, { stopSignal: stopController.signal }));
 
-    expect(llm.requests).toHaveLength(2);
-    expect(res).toMatchObject({ status: "succeeded", action: "post" });
+    expect(llm.requests).toHaveLength(1);
+    expect(res).toMatchObject({ status: "cancelled", failureKind: "stopped", action: null });
+    expect(eventOf(res.eventId)).toMatchObject({ status: "cancelled", failure_kind: "stopped" });
   });
 
   it("TC-UT_RUN-019 再生成の側で 3036 になったら free_tier で閉じて投げ直し、output_text に 1 回目の出力を残す", async () => {
@@ -474,5 +476,38 @@ describe("opportunityRunner（単体テスト）", () => {
 
     expect(res).toMatchObject({ status: "cancelled", failureKind: "cancelled" });
     expect(eventOf(res.eventId)).toMatchObject({ status: "cancelled", failure_kind: "cancelled" });
+  });
+
+  it("TC-UT_RUN-021 1 回目が不正な形式で、再生成の前に世界が止まっていたら（shouldContinue が false）、再生成を呼ばずに cancelled（stopped）で閉じる", async () => {
+    let running = true;
+    const llm = scriptedLlm([
+      () => {
+        running = false;
+        return makeLlmResult("JSON ではない");
+      },
+      makeLlmResult(POST_JSON),
+    ]);
+
+    const res = await runOpportunity(makeCtx(llm, { shouldContinue: () => running }));
+
+    expect(llm.requests).toHaveLength(1);
+    expect(res).toMatchObject({ status: "cancelled", failureKind: "stopped" });
+  });
+
+  it("TC-UT_RUN-022 createEvent は世界が無ければ例外を投げ、生成イベントを作らない", () => {
+    const ctx = makeCtx(scriptedLlm([]), { worldId: "01J000000000000000NOWORLD0" });
+
+    expect(() => createEvent(ctx)).toThrow("World not found");
+
+    expect(t.db.select().from(generation_events).all()).toHaveLength(0);
+  });
+
+  it("TC-UT_RUN-023 createEvent は world_settings が無ければ例外を投げ、生成イベントを作らない", () => {
+    const bareWorld = seedWorld(t.db);
+    const ctx = makeCtx(scriptedLlm([]), { worldId: bareWorld, agentId: seedAgent(t.db, bareWorld, "zen") });
+
+    expect(() => createEvent(ctx)).toThrow("World settings not found");
+
+    expect(t.db.select().from(generation_events).all()).toHaveLength(0);
   });
 });

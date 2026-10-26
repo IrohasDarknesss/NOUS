@@ -144,7 +144,7 @@
     },
     {
       "id": "B24",
-      "condition": "catch：想定外の例外（server_error）",
+      "condition": "catch：想定外の例外（server_error）。偽は B18〜B23 のどれかに当たったとき",
       "location": "opportunityRunner.ts:656"
     },
     {
@@ -154,11 +154,11 @@
     }
   ],
   "issues": [
-    "疑い 1：不正な形式の試行は LLM が応答しており Neurons を消費しているが、トークン・Neurons を 0 で記録している。daily_usage.neurons が実際の消費より少なくなり、日次上限の判定が甘くなる。runOpportunity の通しでも、不正な形式の後に再生成で成功したとき daily_usage.neurons・生成イベントの neurons・戻り値の neurons に 1 回目の分が入らない。TC-UT_RUN-017 は設計どおりの期待結果で書いた（実施で NG になる見込み）。TC-NOUS63_DEV-18 は 1 回目の Neurons 0 を期待しており、疑いと食い違う",
-    "確認事項 1：不正な形式の後の再生成の前には shouldContinue・stopSignal を見ないため、一時停止・上限停止の指示の後でも再生成を 1 回呼ぶ（TC-UT_RUN-018 は実装の値）。1 回の呼び出しは最大 60 秒なので AC-P06（60 秒以内）は満たすが、待ちの打ち切りと同じく再生成も止めるかを決めてほしい",
-    "確認事項 2：00:00 UTC をまたいで再試行したとき、試行は呼んだ日の daily_usage に、指標は生成イベントの日の daily_metrics に入る（TC-UT_RUN-009）。設計書に記載がないため実装の値で書いた。Cloudflare の日次の枠が 00:00 UTC で切り替わるのとは合っている",
-    "確認事項 3：TC-NOUS63_DEV-23 は名前に「イベント作成後の AgentNotActiveError」とあるが、実際には closeCancelled などを直接呼んでおり、その経路は通っていない。TC-UT_RUN-006 で補った",
-    "確認事項 4：TC-NOUS63_DEV-23・24、TC-NOUS83_DEV-07 は runOpportunity を呼んだ直後に clock.advance するため、sleep が張られる前に時刻が進む可能性がある。実施のときに落ちたら、テストの書き方の問題として切り分ける",
+    "疑い 1：不正な形式の試行は LLM が応答しており Neurons を消費しているが、トークン・Neurons を 0 で記録している。daily_usage.neurons が実際の消費より少なくなり、日次上限の判定が甘くなる。runOpportunity の通しでも、不正な形式の後に再生成で成功したとき daily_usage.neurons・生成イベントの neurons・戻り値の neurons に 1 回目の分が入らない。加算するのが仕様（2026-10-26 Kouhei Tajima の決定）。TC-UT_RUN-017 は仕様の期待結果で書いた（実施で NG の見込み）。TC-NOUS63_DEV-18 は 1 回目の Neurons 0 を期待しており、仕様と食い違う",
+    "疑い 3：一時停止・上限停止の後の再生成は、待ちと同じく止めるのが仕様（2026-10-26 Kouhei Tajima の決定）。実装は不正な形式の後の再生成の前に shouldContinue・stopSignal を見ないため、止めた後でも再生成を 1 回呼ぶ。TC-UT_RUN-018（stopSignal）・TC-UT_RUN-021（shouldContinue）は仕様の期待結果（再生成を呼ばずに cancelled・stopped で閉じる）で書いた（実施で NG の見込み）",
+    "確認事項 1：00:00 UTC をまたいで再試行したとき、試行は呼んだ日の daily_usage に、指標は生成イベントの日の daily_metrics に入る（TC-UT_RUN-009）。設計書に記載がないため実装の値で書いた。Cloudflare の日次の枠が 00:00 UTC で切り替わるのとは合っている",
+    "確認事項 2：TC-NOUS63_DEV-23 は名前に「イベント作成後の AgentNotActiveError」とあるが、実際には closeCancelled などを直接呼んでおり、その経路は通っていない。TC-UT_RUN-006 で補った",
+    "実施の手がかり：TC-NOUS63_DEV-23・24、TC-NOUS83_DEV-07 は runOpportunity を呼んだ直後に clock.advance するため、sleep が張られる前に時刻が進む可能性がある。実施のときに落ちたら、まずテストの書き方の問題として切り分ける",
     "分岐 B12 の偽（DuplicateActionError で outputText が null）と B17 の真（runOpportunity の中で commitAction が failed）は単体テストでは通さない。行動の検証（validateAction）がいいね済み・フォロー済みを先に弾くため、同時に 2 つ走ったときにしか起きない。commitAction の DuplicateActionError は TC-NOUS63_DEV-20 で直接確かめている",
     "分岐 B25 の真（promptsDir あり）は単体テストでは通さない。テスト用の上書きの引数で、プロンプトの組み立ては NOUS-102（PRM）の範囲で見るため"
   ],
@@ -221,7 +221,9 @@
         "B15-F",
         "B16-F",
         "B17-F",
-        "B25-F"
+        "B25-F",
+        "B2-T",
+        "B3-T"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "実装時のテスト（NOUS-63）",
@@ -262,7 +264,13 @@
       "branches": [
         "B10-F",
         "B23-T",
-        "B4-T"
+        "B4-T",
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B21-F",
+        "B22-F",
+        "B24-F"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "実装時のテスト（NOUS-63）",
@@ -301,7 +309,8 @@
       "input": "FreeTierExceededError",
       "expected": "例外、failed・free_tier、runs=1・failures=1",
       "branches": [
-        "B18-T"
+        "B18-T",
+        "B24-F"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "実装時のテスト（NOUS-63）",
@@ -320,7 +329,9 @@
       "input": "LLM・時計の CancelledError、abort 済みの signal",
       "expected": "cancelled・cancelled、runs=3",
       "branches": [
-        "B19-T"
+        "B19-T",
+        "B18-F",
+        "B24-F"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "実装時のテスト（NOUS-63）",
@@ -340,14 +351,16 @@
       "expected": "cancelled・stopped",
       "branches": [
         "B20-T",
-        "B4-T"
+        "B4-T",
+        "B18-F",
+        "B19-F"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "実装時のテスト（NOUS-63）",
       "suspect": "",
       "test_name": "TC-NOUS63_DEV-23 StoppedError（再試行待機後の停止）とイベント作成後の AgentNotActiveError は closeCancelled（stopped）で閉じる",
       "result": "",
-      "note": "確認事項 3・4"
+      "note": "確認事項 2、実施の手がかり"
     },
     {
       "id": "TC-NOUS63_DEV-24",
@@ -360,14 +373,20 @@
       "expected": "failed・timeout／failed・server_error",
       "branches": [
         "B22-T",
-        "B24-T"
+        "B24-T",
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B21-F",
+        "B22-F",
+        "B23-F"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "実装時のテスト（NOUS-63）",
       "suspect": "",
       "test_name": "TC-NOUS63_DEV-24 TemporaryFailureError と想定外の例外は closeFailed で閉じ、想定外の例外も投げ直さない",
       "result": "",
-      "note": "確認事項 4"
+      "note": "実施の手がかり"
     },
     {
       "id": "TC-NOUS83_DEV-06",
@@ -379,7 +398,9 @@
       "input": "429 の後に stopSignal を abort",
       "expected": "cancelled・stopped、呼び出し 1 回",
       "branches": [
-        "B20-T"
+        "B20-T",
+        "B18-F",
+        "B19-F"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "実装時のテスト（NOUS-83）",
@@ -398,14 +419,16 @@
       "input": "429 の後に shouldContinue=false",
       "expected": "cancelled・stopped",
       "branches": [
-        "B20-T"
+        "B20-T",
+        "B18-F",
+        "B19-F"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "実装時のテスト（NOUS-83）",
       "suspect": "",
       "test_name": "TC-NOUS83_DEV-07 runOpportunity は stopSignal が渡されない場合でも従来どおり shouldContinue の停止で stopped で閉じる",
       "result": "",
-      "note": "確認事項 4"
+      "note": "実施の手がかり"
     },
     {
       "id": "TC-NOUS83_DEV-08",
@@ -495,7 +518,11 @@
       "expected": "failed・timeout、呼び出し 4 回、試行 1〜4（timeout・timeout・invalid_format・timeout）",
       "branches": [
         "B10-T",
-        "B22-T"
+        "B22-T",
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B21-F"
       ],
       "mock": "FakeClock 2026-10-22T09:00:00.000Z、LLM の差し替え",
       "dev_ref": "なし",
@@ -515,7 +542,11 @@
       "expected": "failed・timeout、呼び出し 4 回、試行 1〜4、daily_usage calls=4・runs=1",
       "branches": [
         "B10-T",
-        "B22-T"
+        "B22-T",
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B21-F"
       ],
       "mock": "FakeClock 2026-10-22T09:00:00.000Z、LLM の差し替え",
       "dev_ref": "なし",
@@ -534,7 +565,10 @@
       "input": "参加の判定の時点でエージェントを停止する",
       "expected": "cancelled・stopped、LLM を呼ばない、daily_metrics runs=1・failures=0",
       "branches": [
-        "B21-T"
+        "B21-T",
+        "B18-F",
+        "B19-F",
+        "B20-F"
       ],
       "mock": "GenerationConfig の participation を読むときに agents.state を stopped にする",
       "dev_ref": "なし（DEV-23 は名前にあるが経路を通っていない）",
@@ -554,7 +588,11 @@
       "expected": "failed・server_error、output_text は 1 回目、runs=1・failures=1",
       "branches": [
         "B22-T",
-        "B4-T"
+        "B4-T",
+        "B18-F",
+        "B19-F",
+        "B20-F",
+        "B21-F"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "なし",
@@ -600,7 +638,7 @@
       "suspect": "",
       "test_name": "TC-UT_RUN-009 00:00 UTC をまたいで再試行したら、試行は呼んだ日の daily_usage に、指標は生成イベントの日の daily_metrics に入る",
       "result": "",
-      "note": "確認事項 2。設計書に記載なし。実装の値"
+      "note": "確認事項 1。設計書に記載なし。実装の値"
     },
     {
       "id": "TC-UT_RUN-010",
@@ -728,9 +766,9 @@
       "target": "generateAndValidate",
       "category": "異常系",
       "technique": "分岐網羅",
-      "viewpoint": "world_settings が無いとき ctx.settings の上限で待ちの後の停止を判定する",
-      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、world_settings の無い世界",
-      "input": "timeout、settings の runs 上限 1",
+      "viewpoint": "world_settings が無いとき ctx.settings の Neurons の上限で待ちの後の停止を判定する",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、world_settings の無い世界、daily_usage neurons=100",
+      "input": "timeout、settings の Neurons 上限 100・runs 上限 480",
       "expected": "StoppedError、呼び出し 1 回",
       "branches": [
         "B6-T"
@@ -738,9 +776,9 @@
       "mock": "FakeClock 2026-10-22T09:00:00.000Z、LLM の差し替え",
       "dev_ref": "なし",
       "suspect": "",
-      "test_name": "TC-UT_RUN-016 generateAndValidate は world_settings が無いとき ctx.settings の上限で待ちの後の停止を判定する",
+      "test_name": "TC-UT_RUN-016 generateAndValidate は world_settings が無いとき ctx.settings の Neurons の上限で待ちの後の停止を判定する",
       "result": "",
-      "note": ""
+      "note": "疑い 2 の決定により、上限の判定は Neurons で見る"
     },
     {
       "id": "TC-UT_RUN-017",
@@ -765,21 +803,25 @@
     {
       "id": "TC-UT_RUN-018",
       "target": "runOpportunity / generateAndValidate",
-      "category": "正常系",
+      "category": "異常系",
       "technique": "状態遷移",
-      "viewpoint": "1 回目が不正な形式のとき、その呼び出し中に stopSignal が abort されていても再生成を 1 回呼ぶ",
+      "viewpoint": "1 回目が不正な形式のとき、その呼び出し中に stopSignal が abort されていたら、再生成を呼ばずに cancelled（stopped）で閉じる",
       "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
-      "input": "呼び出し中に stopSignal を abort して不正な出力・post",
-      "expected": "呼び出し 2 回、succeeded・post",
+      "input": "呼び出し中に stopSignal を abort して不正な出力",
+      "expected": "呼び出し 1 回、cancelled・stopped",
       "branches": [
-        "B10-T"
+        "B9-T",
+        "B10-T",
+        "B18-F",
+        "B19-F",
+        "B20-T"
       ],
       "mock": "LLM の差し替え",
       "dev_ref": "なし",
-      "suspect": "",
-      "test_name": "TC-UT_RUN-018 1 回目が不正な形式のとき、その呼び出し中に stopSignal が abort されていても再生成を 1 回呼ぶ",
+      "suspect": "実装は再生成の前に stopSignal を見ず、再生成を呼ぶ（疑い 3）",
+      "test_name": "TC-UT_RUN-018 1 回目が不正な形式のとき、その呼び出し中に stopSignal が abort されていたら、再生成を呼ばずに cancelled（stopped）で閉じる",
       "result": "",
-      "note": "確認事項 1。設計書に記載なし。実装の値"
+      "note": "2026-10-26 Kouhei Tajima の決定：停止の後の再生成は待ちと同じく止める（AC-P06）"
     },
     {
       "id": "TC-UT_RUN-019",
@@ -811,7 +853,8 @@
       "input": "timeout の後、待ち中に stopSignal・signal の順に abort",
       "expected": "cancelled・cancelled",
       "branches": [
-        "B19-T"
+        "B19-T",
+        "B18-F"
       ],
       "mock": "FakeClock 2026-10-22T09:00:00.000Z、LLM の差し替え",
       "dev_ref": "一部 TC-NOUS83_DEV-02（waitOrStop の単体だけ）",
@@ -819,6 +862,68 @@
       "test_name": "TC-UT_RUN-020 再試行の待ちの途中で signal と stopSignal の両方が abort されたら、緊急停止を優先して cancelled（cancelled）で閉じる",
       "result": "",
       "note": "NOUS-83 の決定：両方なら signal を優先"
+    },
+    {
+      "id": "TC-UT_RUN-021",
+      "target": "runOpportunity / generateAndValidate",
+      "category": "異常系",
+      "technique": "状態遷移",
+      "viewpoint": "1 回目が不正な形式で、再生成の前に世界が止まっていたら（shouldContinue が false）、再生成を呼ばずに cancelled（stopped）で閉じる",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "1 回目の呼び出しの中で shouldContinue を false にして不正な出力",
+      "expected": "呼び出し 1 回、cancelled・stopped",
+      "branches": [
+        "B9-T",
+        "B10-T",
+        "B18-F",
+        "B19-F",
+        "B20-T"
+      ],
+      "mock": "LLM の差し替え、shouldContinue",
+      "dev_ref": "なし",
+      "suspect": "実装は再生成の前に shouldContinue を見ず、再生成を呼ぶ（疑い 3）",
+      "test_name": "TC-UT_RUN-021 1 回目が不正な形式で、再生成の前に世界が止まっていたら（shouldContinue が false）、再生成を呼ばずに cancelled（stopped）で閉じる",
+      "result": "",
+      "note": "2026-10-26 Kouhei Tajima の決定"
+    },
+    {
+      "id": "TC-UT_RUN-022",
+      "target": "createEvent",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "世界が無ければ例外を投げ、生成イベントを作らない",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z",
+      "input": "存在しない worldId",
+      "expected": "例外（World not found）、生成イベント 0 件",
+      "branches": [
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（runOpportunity は先に世界を確かめるので、この分岐は直接呼んだときだけ通る）",
+      "suspect": "",
+      "test_name": "TC-UT_RUN-022 createEvent は世界が無ければ例外を投げ、生成イベントを作らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_RUN-023",
+      "target": "createEvent",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "world_settings が無ければ例外を投げ、生成イベントを作らない",
+      "precondition": "一時 DB（createTestDb）、FakeClock 2026-10-22T09:00:00.000Z、world_settings の無い世界",
+      "input": "その世界の worldId",
+      "expected": "例外（World settings not found）、生成イベント 0 件",
+      "branches": [
+        "B2-T",
+        "B3-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（同上）",
+      "suspect": "",
+      "test_name": "TC-UT_RUN-023 createEvent は world_settings が無ければ例外を投げ、生成イベントを作らない",
+      "result": "",
+      "note": ""
     }
   ]
 }
