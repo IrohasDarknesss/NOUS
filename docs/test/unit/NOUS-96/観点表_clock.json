@@ -1,0 +1,1106 @@
+{
+  "title": "時計（clock/clock.ts・clock/fakeClock.ts）",
+  "ticket": "NOUS-96",
+  "author": "Mark Zuckerberg（開発担当）",
+  "created_on": "2026-10-23",
+  "targets": [
+    "apps/server/src/clock/clock.ts",
+    "apps/server/src/clock/fakeClock.ts"
+  ],
+  "framework": "TypeScript / Vitest 2.1.9（environment: node）",
+  "test_files": [
+    "apps/server/src/clock/clock.test.ts（実装時、NOUS-45）",
+    "apps/server/src/clock/clock.ut.test.ts（単体テストで追加）",
+    "apps/server/src/clock/fakeClock.ut.test.ts（単体テストで追加）"
+  ],
+  "dependencies": [
+    "実時刻とタイマー（Date.now・setTimeout・setInterval。SystemClock だけが使う）",
+    "環境変数 NODE_ENV・AISNS_CLOCK（createClock）",
+    "AbortSignal（sleep の取り消し）"
+  ],
+  "design_refs": [
+    "BE 詳細設計 world 1章（clock/ の構成）・4章（now・sleep・setTimer、advance、createClock）",
+    "基本設計書_概要 9章「時計の差し替え」"
+  ],
+  "branches": [
+    {
+      "id": "B1",
+      "condition": "createClock の env を省略（既定の process.env）",
+      "location": "clock.ts:120"
+    },
+    {
+      "id": "B2",
+      "condition": "env.AISNS_CLOCK === \"fake\"",
+      "location": "clock.ts:121"
+    },
+    {
+      "id": "B3",
+      "condition": "env.NODE_ENV === \"test\"",
+      "location": "clock.ts:122"
+    },
+    {
+      "id": "B4",
+      "condition": "env.NODE_ENV === \"production\"",
+      "location": "clock.ts:123"
+    },
+    {
+      "id": "B5",
+      "condition": "onUtcMidnight のタイマーの中で cancelled（解除の後に発火した）",
+      "location": "clock.ts:51"
+    },
+    {
+      "id": "B6",
+      "condition": "SystemClock.sleep：signal が abort 済み",
+      "location": "clock.ts:84"
+    },
+    {
+      "id": "B7",
+      "condition": "SystemClock.sleep：期限より先に abort された（onAbort が走る）",
+      "location": "clock.ts:88-96"
+    },
+    {
+      "id": "B8",
+      "condition": "FakeClock の開始時刻が数値（typeof start === \"number\"。省略時の Date.now() を含む）",
+      "location": "fakeClock.ts:27"
+    },
+    {
+      "id": "B9",
+      "condition": "FakeClock.sleep：signal が abort 済み",
+      "location": "fakeClock.ts:44"
+    },
+    {
+      "id": "B10",
+      "condition": "FakeClock.sleep：期限より先に abort された（onAbort が走る）",
+      "location": "fakeClock.ts:48-56"
+    },
+    {
+      "id": "B11",
+      "condition": "setRepeatingTimer の ms <= 0",
+      "location": "fakeClock.ts:65"
+    },
+    {
+      "id": "B12",
+      "condition": "advance の ms < 0",
+      "location": "fakeClock.ts:74"
+    },
+    {
+      "id": "B13",
+      "condition": "advance のループ：目標の時刻までに期限の来たタイマーがある（!timer の偽）",
+      "location": "fakeClock.ts:76-78"
+    },
+    {
+      "id": "B14",
+      "condition": "advanceTo の時刻が数値",
+      "location": "fakeClock.ts:89"
+    },
+    {
+      "id": "B15",
+      "condition": "jump の ms < 0",
+      "location": "fakeClock.ts:98"
+    },
+    {
+      "id": "B16",
+      "condition": "jump：期限の来たタイマーが、先に呼んだタイマーの中で解除済み",
+      "location": "fakeClock.ts:102"
+    },
+    {
+      "id": "B17",
+      "condition": "addTimer：ms が負（Math.max で 0 にする）",
+      "location": "fakeClock.ts:115"
+    },
+    {
+      "id": "B18",
+      "condition": "fire：1回だけのタイマー・sleep（intervalMs === undefined）",
+      "location": "fakeClock.ts:127"
+    },
+    {
+      "id": "B19",
+      "condition": "fire：本来の次の期限が現在時刻以前（jump の後）",
+      "location": "fakeClock.ts:132"
+    }
+  ],
+  "issues": [
+    "確認事項 1：README 6.2 は「サーバーのコードには vi.useFakeTimers() を使わない」としているが、SystemClock は setTimeout・setInterval をそのまま包む実装で、FakeClock では差し替えられない。SystemClock の行（TC-UT_CLK-026〜028）だけは、実装時のテスト（TC-NOUS45_DEV-19〜21）と同じく vi.useFakeTimers() を使い、afterEach で vi.useRealTimers() に戻す。",
+    "確認事項 2：SystemClock.setTimer・sleep は setTimeout をそのまま使うため、2^31-1 ms（約 24.8 日）を超える値を渡すと Node が 1 ms に丸めて即時に発火する。今の呼び出し（onUtcMidnight は最大 1 日、Scheduler の周期の待ち、再試行の 30・120 秒）はどれもこの範囲に収まるので、バグの疑いではなく確認事項とする。単体テストのケースは作らない（vi.useFakeTimers では Node の丸めを再現できないため）。",
+    "確認事項 3：B5（onUtcMidnight の cancelled）は、FakeClock・SystemClock とも解除したタイマーを呼ばないため、本物の Clock では通らない守りの分岐。TC-UT_CLK-009 で Clock を差し替えて真を通す。"
+  ],
+  "cases": [
+    {
+      "id": "TC-NOUS45_DEV-01",
+      "target": "createClock",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "AISNS_CLOCK=fake かつ NODE_ENV=test のときだけ FakeClock を返す",
+      "precondition": "なし",
+      "input": "{ NODE_ENV: \"test\", AISNS_CLOCK: \"fake\" }",
+      "expected": "FakeClock のインスタンス",
+      "branches": [
+        "B1-F",
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-01 AISNS_CLOCK=fake かつ NODE_ENV=test のときだけ FakeClock を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-02",
+      "target": "createClock",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "AISNS_CLOCK が未指定・system なら SystemClock を返す",
+      "precondition": "なし",
+      "input": "{ NODE_ENV: \"test\" }、{ NODE_ENV: \"test\", AISNS_CLOCK: \"system\" }、{ NODE_ENV: \"production\" }",
+      "expected": "どれも SystemClock",
+      "branches": [
+        "B1-F",
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-02 AISNS_CLOCK が未指定・system なら SystemClock を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-03",
+      "target": "createClock",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "development で fake を指定しても SystemClock を返す",
+      "precondition": "なし",
+      "input": "{ NODE_ENV: \"development\", AISNS_CLOCK: \"fake\" }",
+      "expected": "SystemClock",
+      "branches": [
+        "B2-T",
+        "B3-F",
+        "B4-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-03 development で fake を指定しても SystemClock を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-04",
+      "target": "createClock",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "production で fake を指定すると ConfigError",
+      "precondition": "なし",
+      "input": "{ NODE_ENV: \"production\", AISNS_CLOCK: \"fake\" }",
+      "expected": "ConfigError を投げる",
+      "branches": [
+        "B2-T",
+        "B3-F",
+        "B4-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-04 production で fake を指定すると ConfigError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-05",
+      "target": "utcDate",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "utcDate は UTC の日付を返す",
+      "precondition": "なし",
+      "input": "2026-10-20T23:59:59.999Z、2026-10-21T00:00:00.000Z",
+      "expected": "\"2026-10-20\"、\"2026-10-21\"",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-05 utcDate は UTC の日付を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-06",
+      "target": "nextUtcMidnight / msUntilNextUtcMidnight",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "nextUtcMidnight は次の 00:00 UTC、ちょうど 00:00 なら翌日",
+      "precondition": "なし",
+      "input": "2026-10-20T23:58:00.000Z、2026-10-21T00:00:00.000Z",
+      "expected": "2026-10-21T00:00:00.000Z、2026-10-22T00:00:00.000Z。23:58 からの残りは 120000",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-06 nextUtcMidnight は次の 00:00 UTC、ちょうど 00:00 なら翌日",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-07",
+      "target": "addMs",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "addMs は ms の後の時刻を返す",
+      "precondition": "なし",
+      "input": "2026-10-20T23:58:00.000Z、60000",
+      "expected": "2026-10-20T23:59:00.000Z",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-07 addMs は ms の後の時刻を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-08",
+      "target": "FakeClock.now / nowMs / nowIso / advance",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "時刻は advance でだけ進む",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "advance(1500)",
+      "expected": "2026-10-20T23:58:01.500Z",
+      "branches": [
+        "B8-F",
+        "B12-F",
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-08 時刻は advance でだけ進む",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-09",
+      "target": "FakeClock.sleep",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "sleep は期限まで進めたときに解決する",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "sleep(30000)、advance(29999) → advance(1)",
+      "expected": "29999 では未解決、30000 で解決。pendingCount 0",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-09 sleep は期限まで進めたときに解決する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-10",
+      "target": "FakeClock.sleep",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "sleep は signal の abort で CancelledError として拒否する",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "sleep(120000, signal) → abort()",
+      "expected": "CancelledError で拒否。pendingCount 0",
+      "branches": [
+        "B9-F",
+        "B10-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-10 sleep は signal の abort で CancelledError として拒否する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-11",
+      "target": "FakeClock.sleep",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "abort 済みの signal なら sleep はすぐ拒否する",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "abort 済みの signal で sleep(1000)",
+      "expected": "CancelledError で拒否",
+      "branches": [
+        "B9-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-11 abort 済みの signal なら sleep はすぐ拒否する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-12",
+      "target": "FakeClock.setTimer / advance",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "タイマーは期限の順に、その時刻で発火する",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setTimer 3000・1000・3000 → advance(5000)",
+      "expected": "a@1000、b@3000、c@3000 の順",
+      "branches": [
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-12 タイマーは期限の順に、その時刻で発火する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-13",
+      "target": "FakeClock.setTimer",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "解除したタイマーは発火しない",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setTimer(1000) → 解除 → advance(2000)",
+      "expected": "callback を呼ばない",
+      "branches": [
+        "B13-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-13 解除したタイマーは発火しない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-14",
+      "target": "FakeClock.setRepeatingTimer",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "繰り返しのタイマーは間隔ごとに発火する（B08 の 60 秒）",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setRepeatingTimer(60000) → advance(180000) → 解除 → advance(60000)",
+      "expected": "3 回呼び、解除の後は増えない",
+      "branches": [
+        "B11-F",
+        "B13-T",
+        "B18-F",
+        "B19-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-14 繰り返しのタイマーは間隔ごとに発火する（B08 の 60 秒）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-15",
+      "target": "FakeClock.sleep / advance",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "sleep の後に張った次の sleep も、同じ advance の中で解決する（周期の連続）",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "sleep(10000) を 3 回続ける → advance(30000)",
+      "expected": "10000・20000・30000 で起きる",
+      "branches": [
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-15 sleep の後に張った次の sleep も、同じ advance の中で解決する（周期の連続）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-16",
+      "target": "onUtcMidnight",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "onUtcMidnight は 00:00 UTC ごとに発火する（B02・B06）",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "advance(2 分＋1 日) → 解除 → advance(1 日)",
+      "expected": "2026-10-21T00:00:00.000Z と 2026-10-22T00:00:00.000Z の 2 回。解除の後は増えない",
+      "branches": [
+        "B5-F",
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-16 onUtcMidnight は 00:00 UTC ごとに発火する（B02・B06）",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-17",
+      "target": "FakeClock.jump",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "jump はスリープからの復帰を再現し、取りこぼしたタイマーを復帰後の時刻で1回ずつ呼ぶ",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setRepeatingTimer(60000) → jump(600000) → advance(60000)",
+      "expected": "600000 で 1 回、次は 660000",
+      "branches": [
+        "B15-F",
+        "B16-F",
+        "B18-F",
+        "B19-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-17 jump はスリープからの復帰を再現し、取りこぼしたタイマーを復帰後の時刻で1回ずつ呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-18",
+      "target": "FakeClock.advanceTo / advance",
+      "category": "異常系",
+      "technique": "開発者テスト",
+      "viewpoint": "advanceTo は指定の時刻まで進め、時刻を戻す指定は RangeError",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "advanceTo(2026-10-21T00:00:00.000Z)、advance(-1)",
+      "expected": "時刻が 2026-10-21T00:00:00.000Z。advance(-1) は RangeError",
+      "branches": [
+        "B14-F",
+        "B12-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-18 advanceTo は指定の時刻まで進め、時刻を戻す指定は RangeError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-19",
+      "target": "SystemClock.now / nowMs / nowIso",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "now・nowIso は実時刻を返す",
+      "precondition": "vi.useFakeTimers（2026-10-20T23:58:00.000Z）",
+      "input": "now()・nowIso()・nowMs()",
+      "expected": "2026-10-20T23:58:00.000Z",
+      "branches": [],
+      "mock": "Date.now（vi.useFakeTimers）",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-19 now・nowIso は実時刻を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-20",
+      "target": "SystemClock.sleep",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "sleep は ms の後に解決し、abort で CancelledError",
+      "precondition": "vi.useFakeTimers",
+      "input": "sleep(1000) → 1000 進める、sleep(1000, signal) → abort()",
+      "expected": "1 本目は解決、2 本目は CancelledError",
+      "branches": [
+        "B6-F",
+        "B7-F",
+        "B7-T"
+      ],
+      "mock": "setTimeout（vi.useFakeTimers）",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-20 sleep は ms の後に解決し、abort で CancelledError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-NOUS45_DEV-21",
+      "target": "SystemClock.setTimer / setRepeatingTimer",
+      "category": "正常系",
+      "technique": "開発者テスト",
+      "viewpoint": "setTimer・setRepeatingTimer は解除の関数を返す",
+      "precondition": "vi.useFakeTimers",
+      "input": "setTimer(1000)・setRepeatingTimer(1000) → 3000 進める → 解除 → 3000 進める",
+      "expected": "1 回だけと 3 回",
+      "branches": [],
+      "mock": "setTimeout・setInterval（vi.useFakeTimers）",
+      "dev_ref": "実装時のテスト（NOUS-45）",
+      "suspect": "",
+      "test_name": "TC-NOUS45_DEV-21 setTimer・setRepeatingTimer は解除の関数を返す",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-001",
+      "target": "utcDate / nextUtcMidnight / msUntilNextUtcMidnight",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "日の区切りの直前（23:59:59.999）は当日の日付で、次の 00:00 UTC まで 1 ms",
+      "precondition": "なし",
+      "input": "2026-10-21T23:59:59.999Z",
+      "expected": "utcDate は \"2026-10-21\"、nextUtcMidnight は 2026-10-22T00:00:00.000Z、残りは 1",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS45_DEV-05（日付だけ。残りの ms は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-001 日の区切りの直前（23:59:59.999）は当日の日付で、次の 00:00 UTC まで 1 ms",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-002",
+      "target": "utcDate / msUntilNextUtcMidnight",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "ちょうど 00:00:00.000 UTC は新しい日付で、次の区切りまで 24 時間",
+      "precondition": "なし",
+      "input": "2026-10-22T00:00:00.000Z",
+      "expected": "utcDate は \"2026-10-22\"、残りは 86400000",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS45_DEV-06（次の時刻だけ。残りの ms は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-002 ちょうど 00:00:00.000 UTC は新しい日付で、次の区切りまで 24 時間",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-003",
+      "target": "addMs",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "addMs は 0 と負の ms も足し引きし、元の Date を変えない",
+      "precondition": "なし",
+      "input": "2026-10-22T00:00:00.000Z と 0、-1",
+      "expected": "同じ時刻、2026-10-21T23:59:59.999Z。元の Date は変わらない",
+      "branches": [],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-07 は正の ms だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-003 addMs は 0 と負の ms も足し引きし、元の Date を変えない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-004",
+      "target": "createClock",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "env を省略すると process.env を読む",
+      "precondition": "vi.stubEnv で NODE_ENV=test、AISNS_CLOCK=fake",
+      "input": "createClock()",
+      "expected": "FakeClock",
+      "branches": [
+        "B1-T",
+        "B2-T",
+        "B3-T"
+      ],
+      "mock": "process.env（vi.stubEnv。afterEach で vi.unstubAllEnvs）",
+      "dev_ref": "なし（DEV は env をすべて引数で渡している）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-004 env を省略すると process.env を読む",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-005",
+      "target": "createClock",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "NODE_ENV が未設定のまま fake を指定したら SystemClock を返し、例外にしない",
+      "precondition": "なし",
+      "input": "{ AISNS_CLOCK: \"fake\" }",
+      "expected": "SystemClock",
+      "branches": [
+        "B2-T",
+        "B3-F",
+        "B4-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-03 は development のとき）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-005 NODE_ENV が未設定のまま fake を指定したら SystemClock を返し、例外にしない",
+      "result": "",
+      "note": "設計書（world 4章）の「それ以外は SystemClock」による"
+    },
+    {
+      "id": "TC-UT_CLK-006",
+      "target": "createClock",
+      "category": "正常系",
+      "technique": "同値分割",
+      "viewpoint": "AISNS_CLOCK の値は大文字・小文字を区別し、\"FAKE\" は fake とみなさない",
+      "precondition": "なし",
+      "input": "{ NODE_ENV: \"production\", AISNS_CLOCK: \"FAKE\" }、{ NODE_ENV: \"test\", AISNS_CLOCK: \"FAKE\" }",
+      "expected": "どちらも SystemClock（ConfigError にしない）",
+      "branches": [
+        "B2-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は小文字の fake と system だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-006 AISNS_CLOCK の値は大文字・小文字を区別し、\"FAKE\" は fake とみなさない",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（fake だけを特別に扱う）"
+    },
+    {
+      "id": "TC-UT_CLK-007",
+      "target": "onUtcMidnight",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "日をまたいで jump したら復帰の時刻に1回だけ呼び、次は翌日の 00:00 UTC に呼ぶ（遅れを持ち越さない）",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "onUtcMidnight → jump(1 日) → advance(2 分)",
+      "expected": "jump の後に 2026-10-21T23:58:00.000Z で 1 回、advance の後に 2026-10-22T00:00:00.000Z で 2 回目",
+      "branches": [
+        "B5-F",
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-16 は advance だけ。DEV-17 は繰り返しのタイマー）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-007 日をまたいで jump したら復帰の時刻に1回だけ呼び、次は翌日の 00:00 UTC に呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-008",
+      "target": "onUtcMidnight",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "callback の中で解除したら、次のタイマーは残らない",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "callback の中で解除の関数を呼ぶ → advance(2 分＋2 日)",
+      "expected": "callback は 1 回だけ。pendingCount 0",
+      "branches": [
+        "B5-F",
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-16 は callback の外で解除）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-008 callback の中で解除したら、次のタイマーは残らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-009",
+      "target": "onUtcMidnight",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "解除した後にタイマーが発火しても callback を呼ばず、張り直さない",
+      "precondition": "なし",
+      "input": "onUtcMidnight → 解除 → 控えておいたタイマーの callback を直接呼ぶ",
+      "expected": "callback を呼ばない。setTimer は最初の 1 回だけ",
+      "branches": [
+        "B5-T"
+      ],
+      "mock": "Clock の差し替え（setTimer は callback を控えるだけで、解除しても消さない）",
+      "dev_ref": "なし（FakeClock は解除したタイマーを呼ばないため、B5-T は差し替えでしか通らない）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-009 解除した後にタイマーが発火しても callback を呼ばず、張り直さない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-010",
+      "target": "onUtcMidnight",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "23:59:59.999 から始めると 1 ms 後の 00:00 UTC に呼ぶ",
+      "precondition": "FakeClock 2026-10-21T23:59:59.999Z",
+      "input": "onUtcMidnight → advance(1)",
+      "expected": "2026-10-22T00:00:00.000Z で 1 回",
+      "branches": [
+        "B5-F",
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-16 は 23:58 から）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-010 23:59:59.999 から始めると 1 ms 後の 00:00 UTC に呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-011",
+      "target": "onUtcMidnight",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "ちょうど 00:00:00.000 から始めると、その時刻ではなく翌日の 00:00 UTC に呼ぶ",
+      "precondition": "FakeClock 2026-10-22T00:00:00.000Z",
+      "input": "onUtcMidnight → advance(0) → advance(86399999) → advance(1)",
+      "expected": "86399999 までは呼ばない。86400000 で 2026-10-23T00:00:00.000Z に 1 回",
+      "branches": [
+        "B5-F",
+        "B13-F",
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-011 ちょうど 00:00:00.000 から始めると、その時刻ではなく翌日の 00:00 UTC に呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-012",
+      "target": "FakeClock（constructor）",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "開始時刻をエポックからの ms（数値）でも渡せる",
+      "precondition": "なし",
+      "input": "new FakeClock(Date.UTC(2026, 9, 22, 9))",
+      "expected": "nowIso は 2026-10-22T09:00:00.000Z",
+      "branches": [
+        "B8-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV は Date だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-012 開始時刻をエポックからの ms（数値）でも渡せる",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-013",
+      "target": "FakeClock.sleep",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "sleep(0) は時刻を進めずに advance(0) で解決する",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "sleep(0) → advance(0)",
+      "expected": "解決する。時刻は変わらない",
+      "branches": [
+        "B9-F",
+        "B13-T",
+        "B17-F",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-013 sleep(0) は時刻を進めずに advance(0) で解決する",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-014",
+      "target": "FakeClock.sleep",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "負の ms の sleep は 0 として扱い、advance(0) で解決する",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "sleep(-5000) → advance(0)",
+      "expected": "解決する。時刻は変わらない",
+      "branches": [
+        "B13-T",
+        "B17-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-014 負の ms の sleep は 0 として扱い、advance(0) で解決する",
+      "result": "",
+      "note": "設計書に記載なし。実装の値（Math.max(0, ms)）"
+    },
+    {
+      "id": "TC-UT_CLK-015",
+      "target": "FakeClock.setRepeatingTimer",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "繰り返しの間隔が 0 以下なら RangeError",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setRepeatingTimer(0)、setRepeatingTimer(-1)",
+      "expected": "どちらも RangeError。タイマーは張られない（pendingCount 0）",
+      "branches": [
+        "B11-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-015 繰り返しの間隔が 0 以下なら RangeError",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-016",
+      "target": "FakeClock.setRepeatingTimer",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "繰り返しの間隔が 1 ms でも受け付け、1 ms ごとに呼ぶ",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setRepeatingTimer(1) → advance(3)",
+      "expected": "3 回呼ぶ",
+      "branches": [
+        "B11-F",
+        "B13-T",
+        "B18-F",
+        "B19-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-14 は 60000）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-016 繰り返しの間隔が 1 ms でも受け付け、1 ms ごとに呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-017",
+      "target": "FakeClock.setRepeatingTimer / advance",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "繰り返しのタイマーは間隔の 1 ms 前では呼ばず、ちょうどで呼ぶ",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setRepeatingTimer(60000) → advance(59999) → advance(1)",
+      "expected": "59999 では 0 回、60000 で 1 回",
+      "branches": [
+        "B13-F",
+        "B13-T",
+        "B18-F",
+        "B19-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-14 は間隔の倍数だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-017 繰り返しのタイマーは間隔の 1 ms 前では呼ばず、ちょうどで呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-018",
+      "target": "FakeClock.jump",
+      "category": "異常系",
+      "technique": "境界値",
+      "viewpoint": "jump に負の ms を渡すと RangeError で、時刻は変わらない",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "jump(-1)",
+      "expected": "RangeError。時刻は 2026-10-20T23:58:00.000Z のまま",
+      "branches": [
+        "B15-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-18 は advance の負だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-018 jump に負の ms を渡すと RangeError で、時刻は変わらない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-019",
+      "target": "FakeClock.jump",
+      "category": "正常系",
+      "technique": "境界値",
+      "viewpoint": "jump(0) は今ちょうど期限のタイマーを呼ぶ",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setTimer(0) → jump(0)",
+      "expected": "1 回呼ぶ。pendingCount 0",
+      "branches": [
+        "B15-F",
+        "B16-F",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-019 jump(0) は今ちょうど期限のタイマーを呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-020",
+      "target": "FakeClock.jump",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "jump の中で先に呼んだタイマーが後のタイマーを解除したら、後のタイマーは呼ばない",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setTimer(1000, A：B を解除)・setTimer(2000, B) → jump(5000)",
+      "expected": "A だけ呼ぶ",
+      "branches": [
+        "B16-F",
+        "B16-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-020 jump の中で先に呼んだタイマーが後のタイマーを解除したら、後のタイマーは呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-021",
+      "target": "FakeClock.jump",
+      "category": "正常系",
+      "technique": "状態遷移",
+      "viewpoint": "jump で取りこぼした1回だけのタイマーは、期限の順に復帰後の時刻で呼ぶ",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setTimer(3000, b)・setTimer(1000, a) → jump(10000)",
+      "expected": "a・b の順。どちらも復帰後の時刻（+10000）で呼ぶ",
+      "branches": [
+        "B15-F",
+        "B16-F",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-17 は繰り返しのタイマーだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-021 jump で取りこぼした1回だけのタイマーは、期限の順に復帰後の時刻で呼ぶ",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-022",
+      "target": "FakeClock.advance",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "advance の中でタイマーが張ったタイマーは、目標の時刻までなら同じ advance で呼び、それより後なら呼ばない",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "setTimer(1000, 中で setTimer(500, x) と setTimer(5000, y)) → advance(2000)",
+      "expected": "x は 1500 で呼ぶ。y は呼ばない（pendingCount 1）。時刻は +2000",
+      "branches": [
+        "B13-T",
+        "B13-F",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "一部 TC-NOUS45_DEV-15（sleep の連続だけ。目標の時刻を超える側は見ていない）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-022 advance の中でタイマーが張ったタイマーは、目標の時刻までなら同じ advance で呼び、それより後なら呼ばない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-023",
+      "target": "FakeClock.sleep",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "解決した後の sleep の signal を abort しても、何も起きない",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "sleep(1000, signal) → advance(1000) → abort()",
+      "expected": "解決のまま（拒否されない）。pendingCount 0",
+      "branches": [
+        "B9-F",
+        "B10-F",
+        "B13-T",
+        "B18-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-023 解決した後の sleep の signal を abort しても、何も起きない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-024",
+      "target": "FakeClock.advanceTo",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "advanceTo は時刻をエポックからの ms（数値）でも受け取る",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "advanceTo(Date.UTC(2026, 9, 21))",
+      "expected": "時刻が 2026-10-21T00:00:00.000Z",
+      "branches": [
+        "B14-T",
+        "B12-F"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-18 は Date だけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-024 advanceTo は時刻をエポックからの ms（数値）でも受け取る",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-025",
+      "target": "FakeClock.advanceTo",
+      "category": "異常系",
+      "technique": "エラー処理",
+      "viewpoint": "advanceTo に今より前の時刻を渡すと RangeError で、時刻は変わらない",
+      "precondition": "FakeClock 2026-10-20T23:58:00.000Z",
+      "input": "advanceTo(2026-10-20T23:57:59.999Z)",
+      "expected": "RangeError。時刻は変わらない",
+      "branches": [
+        "B14-F",
+        "B12-T"
+      ],
+      "mock": "なし",
+      "dev_ref": "なし（DEV-18 は advance(-1)）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-025 advanceTo に今より前の時刻を渡すと RangeError で、時刻は変わらない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-026",
+      "target": "SystemClock.sleep",
+      "category": "異常系",
+      "technique": "分岐網羅",
+      "viewpoint": "abort 済みの signal なら sleep はすぐ拒否し、タイマーを張らない",
+      "precondition": "vi.useFakeTimers",
+      "input": "abort 済みの signal で sleep(1000)",
+      "expected": "CancelledError で拒否。vi.getTimerCount() は 0",
+      "branches": [
+        "B6-T"
+      ],
+      "mock": "setTimeout（vi.useFakeTimers）",
+      "dev_ref": "なし（DEV-20 は待ちの途中の abort）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-026 abort 済みの signal なら sleep はすぐ拒否し、タイマーを張らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-027",
+      "target": "SystemClock.sleep",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "解決した後に signal を abort しても拒否にならず、タイマーも残らない",
+      "precondition": "vi.useFakeTimers",
+      "input": "sleep(1000, signal) → 1000 進める → abort()",
+      "expected": "解決のまま。vi.getTimerCount() は 0",
+      "branches": [
+        "B6-F",
+        "B7-F"
+      ],
+      "mock": "setTimeout（vi.useFakeTimers）",
+      "dev_ref": "なし",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-027 解決した後に signal を abort しても拒否にならず、タイマーも残らない",
+      "result": "",
+      "note": ""
+    },
+    {
+      "id": "TC-UT_CLK-028",
+      "target": "SystemClock.setTimer",
+      "category": "正常系",
+      "technique": "分岐網羅",
+      "viewpoint": "期限の前に解除した setTimer は呼ばない",
+      "precondition": "vi.useFakeTimers",
+      "input": "setTimer(1000) → 解除 → 2000 進める",
+      "expected": "callback を呼ばない",
+      "branches": [],
+      "mock": "setTimeout（vi.useFakeTimers）",
+      "dev_ref": "一部 TC-NOUS45_DEV-21（解除するのは繰り返しのタイマーだけ）",
+      "suspect": "",
+      "test_name": "TC-UT_CLK-028 期限の前に解除した setTimer は呼ばない",
+      "result": "",
+      "note": ""
+    }
+  ]
+}
